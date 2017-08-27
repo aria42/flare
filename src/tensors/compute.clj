@@ -2,12 +2,12 @@
   (:require [tensors.graph :as graph]
             [tensors.core :as tensors]
             [plumbing.core :as p]
-            [schema.core :as s]))
+            [schema.core :as s]
+            [clojure.set :as set]
+            [tensors.compute :as compute]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;
 ;;;  Compiled Graph Protocols + Operations
-;;;
 
 (s/defschema CompiledNode
   (assoc graph/Node
@@ -15,10 +15,9 @@
          :grad s/Any))
 
 (defprotocol TensorOp
-  (^boolean valid? [this input-nodes])
-  (^tensors/PFactory factory [this])
-  (forward-pass [this output! inputs])
-  (backward-pass [this output inputs!]))
+  (ensure-valid?! [this input-nodes])
+  (forward-node-pass! [this output! inputs])
+  (backward-node-pass! [this output inputs!]))
 
 (s/defschema CompiledOpNode
   "Compiled operation has a tensor operation associated with
@@ -33,14 +32,21 @@
 (defn post-order-nodes [target]
   (conj (vec (mapcat post-order-nodes (:children target))) target))
 
+(defn ensure-tensor-op
+  [factory node children]
+  (let [op-key (-> node :graph-op graph/op-key)
+        tensor-op (tensors/get-op factory op-key)]
+    (ensure-valid?! tensor-op children)
+    tensor-op))
+
 (defn compile-walk [node compiled-children factory]
   (-> node
       ;; always add value tensor
       (assoc :value (tensors/zeros factory (:shape node)))
       ;; add tensor op for graph ops
       (p/?>  (= :op (:type node))
-             (assoc :tensor-op
-                    (tensors/get-op factory (-> node :graph-op graph/op-key)))
+             (assoc :tensor-op (ensure-tensor-op factory node compiled-children)
+                    )
       ;; add gradient for non-inputs
       (p/?> (not= :input (:type node))
             (assoc :grad (tensors/zeros factory (:shape node))))
@@ -82,8 +88,28 @@
   "forward-pass will topographic walk through graph writing to `:value`
   key on all compiled nodes. You can then look up and retrieve the tensors
   associated with any node"
-  [target :- CompiledNode input->vals]
-  )
+  [target :- CompiledNode factory :- tensors/PFactory input->vals]
+  (let [input-nodes (:input (group-by :type (post-order-nodes target)))
+        provided-input-keys (set (keys input->vals))
+        existing-input-keys (set (map :ref-name input-nodes))]
+    ;; Ensure provided expected input values
+    (when-let [missing (seq (set/difference existing-input-keys provided-input-keys ))]
+      (throw (RuntimeException. (str "Missing needed inputs: " missing))))
+    ;; Copy input values to node tensors
+    (doseq [{:keys [value, ref-name]} input-nodes]
+      (tensors/copy-from-input! factory value (get input->vals ref-name)))
+    ;; Bottom up walk to compute forward values
+    (bottom-up-walk
+     target
+     (fn [node children]
+       (if-not (seq children)
+         node
+         (let [tensor-op (:tensor-op node)]
+           (println "tensor-op " tensor-op)
+           (forward-node-pass! tensor-op node children)
+           node))))
+    ;; Return
+    target))
 
 (s/defn backward-pass!
   "backward-pass through all the parameter nodes associated with
@@ -93,18 +119,20 @@
 
 (def lr
   (let [num-classes 2
-        num-feats 10
-        W (graph/params "W" [num-classes num-feats])
-        b (graph/params "bias" [num-classes 1])
-        feat-vec (graph/input "f" [num-feats 1])
-        activations (graph/+ (graph/* W feat-vec) b)
+        num-feats 3
+        W (graph/input "W" [num-classes num-feats])
+        b (graph/strech (graph/input "bias" [num-classes]) 1)
+        feat-vec (graph/strech (graph/input "f" [num-feats]) 1)
+        activations (graph/squeeze (graph/+ (graph/* W feat-vec) b) 1)
         probs (graph/soft-max activations)
         label (graph/input "label" [1])
         loss (graph/cross-entropy-loss probs label)]
-    loss))
+    {:loss loss
+     :activations activations}))
 
 
 (def simple-graph
   (let [X (graph/input "X" [2 2])
-        Y (graph/input "Y" [2 2])]
-    (graph/+ X Y)))
+        Y (graph/input "Y" [2 2])
+        Z (graph/input "Z" [2 2])]
+    (graph/* Z (graph/+ X Y))))

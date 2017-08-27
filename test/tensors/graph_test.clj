@@ -1,4 +1,4 @@
-(ns tesnors.graph-test
+(ns tensors.graph-test
   (:refer-clojure :exclude [+ *])
   (:require [clojure.test :refer :all]
             [tensors.graph :refer :all]))
@@ -20,8 +20,7 @@
       (are [k v] (= (get Z k) v)
         :shape [1 10]
         :graph-op (->SumGraphOp)
-        :children [X Y]
-        :input-names #{"X" "Y"})
+        :children [X Y])
       (is (thrown? RuntimeException (+ X L)))))
   (testing "simple multiplication"
     (let [Y (input "Y" [1 10])
@@ -32,24 +31,22 @@
       (are [k v] (= (get Z k) v)
         :shape [10 10]
         :graph-op (->MultGraphOp)
-        :children [X Y]
-        :input-names #{"X" "Y"})
+        :children [X Y])
       (are [k v] (= (get Z-rev k) v)
         :shape [1 1]
         :graph-op (->MultGraphOp)
-        :children [Y X]
-        :input-names #{"X" "Y"}))))
+        :children [Y X]))))
 
 
 (deftest logistic-regression-test
   (testing "create logistic regression graph"
     (let [num-classes 2
-          num-feats 10 
+          num-feats 10
           W (params "W" [num-classes num-feats])
           b (params "bias" [num-classes 1])
           feat-vec (input "f" [num-feats 1])
           activations (+ (* W feat-vec) b)
-          probs (soft-max activations)
+          probs (soft-max (squeeze activations 1))
           label (input "label" [1])
           loss (cross-entropy-loss probs label)]
       (= (:shape loss) [1]))))

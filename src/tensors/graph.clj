@@ -5,9 +5,7 @@
             [clojure.string :as str]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;
 ;;;  Schemas + Protocols
-;;;
 
 (s/defschema Node
   "Generic graph node schema"
@@ -26,8 +24,8 @@
 (defprotocol GraphOp
   "Graph operation only needs to be aware of shape of output,
    independent of any tensor implementation."
-  (^Keyword op-key [this])
-  (^Shape forward-shape [this input-shapes]))
+  (op-key [this])
+  (forward-shape [this input-shapes]))
 
 (s/defschema OpNode
   "Graph operation node schema"
@@ -36,9 +34,7 @@
          :children [(s/recursive #'Node)]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;
 ;;;  Making Graph Nodes
-;;;
 
 (def ^:dynamic *current-input-scope* [])
 
@@ -72,26 +68,17 @@
 
 (s/defn ^:private graph-edge :- OpNode
   [op :- GraphOp  nodes :- [Node]]
-  (try
-    {:type :op
-     :shape (forward-shape op nodes)
-     :graph-op op
-     :ref-name (gensym (str (name (op-key op)) ":")) 
-     :children nodes}
-    (catch RuntimeException e
-      (let [msg (format "Operation issue '%s' on shapes %s: %s"
-                        (-> op op-key name)
-                        (str/join "," (map :shape nodes))
-                        (.getMessage e))]
-        (throw (RuntimeException. msg))))))
+  {:type :op
+   :shape (forward-shape op nodes)
+   :graph-op op
+   :ref-name (gensym (str (name (op-key op)) ":")) 
+   :children nodes})
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;
 ;;;  Graph Edge Operations
-;;;
 
-(deftype SumGraphOp []
+(defrecord SumGraphOp []
   GraphOp
   (op-key [this] :+)
   (forward-shape [this input-nodes]
@@ -104,7 +91,7 @@
       shape)))
 
 
-(deftype MultGraphOp []
+(defrecord MultGraphOp []
   GraphOp
   (op-key [this] :*)
   (forward-shape [this input-nodes]
@@ -123,34 +110,62 @@
   (let [n (count shape)
         dim-counts (frequencies shape)]
     (when-not (and (= n 2) (= (get dim-counts 1) (dec n)))
-      (throw (RuntimeException. (str prefix ": Must be row or column vector"))))))
+      (throw (ex-info (str prefix ": Must be row or column vector"))))))
 
-(deftype SoftMaxOp []
+(defrecord SqueezeGraphOp [dim-to-squeeze]
+  GraphOp
+  (op-key [this] :squeeze)
+  (forward-shape [this inputs]
+    (when-not (= 1 (count inputs))
+      (throw (ex-info "Squeeze only takes single input"
+                      {:causes inputs})))
+    (let [shape (vec (:shape (first inputs)))]
+      (when-not (= 1 (nth shape dim-to-squeeze))
+        (throw (ex-info "Squeeze at ``dimension`` not 1"
+                        {:dim-to-squeeze dim-to-squeeze
+                         :shape shape})))
+      (into (subvec shape 0 dim-to-squeeze)
+            (subvec shape (inc dim-to-squeeze))))))
+
+(defrecord StrechGraphOp [dim-to-insert]
+  GraphOp
+  (op-key [this] :strech)
+  (forward-shape [this inputs]
+    (when-not (= 1 (count inputs))
+      (throw (ex-info "Stretch  only takes single input"
+                      {:causes inputs})))
+    (let [shape (vec (:shape (first inputs)))]
+      (vec
+       (concat (subvec shape 0 dim-to-insert)
+               [1]
+               (when (< (inc dim-to-insert) (count shape))
+                 (subvec shape (inc dim-to-insert))))))))
+
+(defrecord SoftMaxOp []
   GraphOp
   (op-key [this] :soft-max)
   (forward-shape [this input-nodes]
     (when (not= (count input-nodes) 1)
-      (throw (RuntimeException. "Exactly one input required")))
-    (let [first-shape (-> input-nodes first :shape)]
-      (ensure-vector-tensor?! "input" first-shape)
-      first-shape)))
+      (throw (ex-info "Exactly one input required")))
+    (:shape (first input-nodes))))
 
-(deftype CrossEntropyLossOp []
+(defrecord CrossEntropyLossOp []
   GraphOp
   (op-key [this] :cross-entropy-loss)
   (forward-shape [this [activations label :as input-nodes]]
     (when (or (nil? activations) (nil? label) (not= (count input-nodes) 2))
-      (throw (RuntimeException. "Expect (activations, labels) pair")))
-    (when-not (= [1] (:shape label))
-      (throw (RuntimeException. "Label should be a [1] shape tensor")))
-    (let [act-shape (:shape activations)]
-      (ensure-vector-tensor?! "activations" act-shape)
-      [1])))
+      (throw (ex-info "Expect (activations, labels) pair"
+                      {:activations activations :label label})))
+    (when-not (tensors/scalar-shape? (:shape label))
+      (throw (ex-info "Label should be effectively scalar"
+                      {:label-shape (:shape label)})))
+    (when-not (tensors/vector-shape? (:shape activations))
+      (throw (ex-info "Activations should be vector"
+                      {:activations-shape (:shape activations)})))
+    [1]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;
 ;;;  Public
-;;;
 
 (defn + [& inputs]
   (graph-edge (SumGraphOp.) inputs))
@@ -164,12 +179,13 @@
 (defn cross-entropy-loss [activations label]
   (graph-edge (CrossEntropyLossOp.) [activations label]))
 
+(defn squeeze [input dim-to-squeeze]
+  (graph-edge (SqueezeGraphOp. dim-to-squeeze) [input]))
+
+(defn strech [input dim-to-insert]
+  (graph-edge (StrechGraphOp. dim-to-insert) [input]))
+
 (defmacro with-scope [^String scope-name & body]
   `(binding [*current-input-scope* (conj *current-input-scope* (name ~scope-name))]
      ~@body))
 
-(def +core-ops+
-  {:+ (SumGraphOp.)
-   :* (MultGraphOp.)
-   :cross-entropy-loss (CrossEntropyLossOp.)
-   :soft-max  (SoftMaxOp.)})

@@ -1,4 +1,4 @@
-(ns tensors.neanderhal-ops
+(ns tensors.neanderthal-ops
   (:use [uncomplicate.neanderthal core native])
   (:require [tensors.graph :as graph]
             [tensors.core :as tensors]
@@ -10,43 +10,79 @@
 
 
 (defn ^:private valid-shape? [shape]
-  (= 2 (count shape)))
+  (<= (count shape) 2))
 
 (defn ^:private ensure-valid-shape?! [shape]
   (when-not (valid-shape? shape)
-    (throw (RuntimeException. (str "Must use a matrix shape: " (vec shape))))))
+    (throw (ex-info "Must use a vector (1d) or matrix (2d) shape"
+                    {:shape shape}))))
 
-
-(deftype SumTensorOp []
+(defrecord SumTensorOp []
   compute/TensorOp
-  (valid? [this input-nodes]
-    (every? #(valid-shape? (:shape %)) input-nodes))
-  (forward-pass [this output! inputs]
-    (doseq [input inputs]
-      (np/axpy! 1.0 input output!)))
-  (backward-pass [this _ inputs!]
+  (ensure-valid?! [this input-nodes]
+    (doseq [n input-nodes] (ensure-valid-shape?! (:shape n))))
+  (forward-node-pass! [this output! inputs]
+    (copy! (:value (first inputs)) (:value output!))
+    (doseq [input (rest inputs)]
+      (np/axpy! 1.0 (:value input) (:value output!))))
+  (backward-node-pass! [this _ inputs!]
     (doseq [input! inputs!]
-      (np/alter! input! (fn ^double [] 1.0)))))
+      (np/alter! (:value input!) (fn ^double [] 1.0)))))
 
-(deftype MultTensorOp []
-  compute/TensorOp)
+(defrecord MultTensorOp []
+  compute/TensorOp
+  (ensure-valid?! [this input-nodes]
+    (doseq [n input-nodes] (ensure-valid-shape?! (:shape n)))
+    (when-not (= 2 (count input-nodes))
+      (throw (ex-info "Must have two arguments to MultTensorOp"))))
+  (forward-node-pass! [this output! inputs]
+    (let [out (:value output!)
+          [a b] (map :value inputs)]
+      (scal! 0.0 out)
+      (mm! 1.0 a b out)))
+  (backward-node-pass! [this _ inputs!]
+    (doseq [input! inputs!]
+      (np/alter! (:value input!) (fn ^double [] 1.0)))))
 
-(deftype SoftMaxTensorOp []
-  compute/TensorOp)
 
-(deftype CrossEntropyLossTensorOp []
+(defrecord SqueezeTensorOp []
+  compute/TensorOp
+  (ensure-valid?! [this input-nodes]
+    (when-not (= 2 (count (:shape (first input-nodes))))
+      (throw (ex-info "Need matrix shape"
+                      {:shape (:shape (first input-nodes))}))))
+  (forward-node-pass! [this output! [input]]
+    (let [squeeze-graph-op (:graph-op output!)
+          dim-to-squeeze (:dim-to-squeeze squeeze-graph-op)]
+      (copy! (view-vctr (:value input) (:value output!)))))
+  (backward-node-pass! [this _ inputs!]
+    (doseq [input! inputs!]
+      (np/alter! (:value input!) (fn ^double [] 1.0)))))
+
+(defrecord SoftMaxTensorOp []
+  compute/TensorOp
+  (ensure-valid?! [this input-nodes]
+    (when-not (= (count input-nodes) 1)
+      (throw (RuntimeException. "Must have one input")))
+    (ensure-vector-like?! (first input-nodes))
+    (doseq [n input-nodes] (ensure-valid-shape?! (:shape n)))
+    (when-not (= 2 (count input-nodes))
+      (throw (RuntimeException. "Must have two operators to MultTensorOp")))))
+
+(defrecord CrossEntropyLossTensorOp []
   compute/TensorOp)
 
 (def ^:private +tensor-ops+
-  {:+ (SumTensorOp.)
-   :* (MultTensorOp.)
-   :soft-max (SoftMaxTensorOp.)
-   :cross-entropy-loss (CrossEntropyLossTensorOp.)})
+  {:+ ->SumTensorOp
+   :* ->MultTensorOp
+   :soft-max ->SoftMaxTensorOp
+   :squeeze ->SqueezeTensorOp
+   :cross-entropy-loss ->CrossEntropyLossTensorOp})
 
-(deftype Factory []
+(defrecord Factory []
   tensors/PFactory
   (get-op [this op-key]
-    (get +tensor-ops+ op-key))
+    ((get +tensor-ops+ op-key)))
   (from-nums [this nums]
     (let [shape (tensors/guess-shape nums)]
       (case (count shape)
@@ -56,11 +92,11 @@
         ;; else
         (let [err (str "Unallowed shape for neanderthal: " (vec shape))]
           (throw (RuntimeException. err))))))
+  (copy-from-input! [this tensor! nums]
+    (copy! (tensors/from-nums this nums) tensor!))
   (zeros [this shape]
     (case (count shape)
       1 (dv (seq (double-array (first shape))))
       2 (dge (first shape) (second shape))
       (let [err (str "Unallowed shape for neanderthal: " (vec shape))]
         (throw (RuntimeException. err))))))
-
-(def +factory+ (Factory.))

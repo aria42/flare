@@ -16,8 +16,20 @@
       (concat [(count nums)] f))
     :else nil))
 
+(s/defn effective-dimension [shape :- Shape]
+  (let [n (count shape)
+        num-squeeze-dims (count (filter #(= % 1) shape))]
+    (- n num-squeeze-dims)))
+
+(defn vector-shape? [shape]
+  (= (count shape) 1))
+
+(defn scalar-shape? [shape]
+  (= shape [1]))
+
 (defprotocol PFactory
   (from-nums [this nums])
   (get-op [this op-key])
-  (zeros [this shape]))
+  (zeros [this shape])
+  (copy-from-input! [this tensor! nums]))
 
