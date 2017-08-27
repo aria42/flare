@@ -26,12 +26,6 @@
          graph/OpNode
          {:tensor-op TensorOp}))
 
-(defn bottom-up-walk [node walk-fn]
-  (walk-fn node (map #(bottom-up-walk % walk-fn) (:children node))))
-
-(defn post-order-nodes [target]
-  (conj (vec (mapcat post-order-nodes (:children target))) target))
-
 (defn ensure-tensor-op
   [factory node children]
   (let [op-key (-> node :graph-op graph/op-key)
@@ -73,11 +67,11 @@
   [target-node :- graph/Node
    factory :- tensors/PFactory]
   (validate-graph! target-node)
-  (let [compiled-target (bottom-up-walk
+  (let [compiled-target (graph/bottom-up-walk
                          target-node
                          (fn [node children]
                            (compile-walk node children factory)))
-        compiled-nodes (post-order-nodes compiled-target)
+        compiled-nodes (graph/post-order-nodes compiled-target)
         input->vals (p/for-map [n compiled-nodes :when (= :input(:type n))]
                                (:ref-name n) (:value n))]
     (assoc compiled-target
@@ -99,7 +93,7 @@
     (doseq [{:keys [value, ref-name]} input-nodes]
       (tensors/copy-from-input! factory value (get input->vals ref-name)))
     ;; Bottom up walk to compute forward values
-    (bottom-up-walk
+    (graph/bottom-up-walk
      target
      (fn [node children]
        (if-not (seq children)

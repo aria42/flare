@@ -76,6 +76,15 @@
    :ref-name (gensym (str (name (op-key op)) ":")) 
    :children nodes})
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Graph Walks
+
+(defn bottom-up-walk [node walk-fn]
+  (walk-fn node (map #(bottom-up-walk % walk-fn) (:children node))))
+
+(defn post-order-nodes [target]
+  (conj (vec (mapcat post-order-nodes (:children target))) target))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Graph Edge Operations
@@ -173,18 +182,47 @@
     [1]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;  Public
+;;;  Display/Summarize Graphs
 
-(s/defn summarize-computation [target :- Node]
-  (case (:type target)
-    :op
-    (format "(%s %s :shape %s)"
-            (-> target :graph-op op-descriptor)
-            (str/join " " (map summarize-computation (:children target)))
-            (:shape target))
-    :input
-    (format "input(%s, %s)" (:ref-name target) (:shape target))
-    (throw (ex-info "Bad node to summarize" {:node target}))))
+
+(s/defn ^:private display-name [node]
+  (case (:type node)
+    :input (format "input(%s, %s)" (:ref-name node) (:shape node))
+    ;; else
+    (:ref-name node)))
+
+(s/defn generate-equations :- [s/Str]
+  [target :- Node]
+  (for [n (post-order-nodes target) :when (= (:type n) :op)]
+    (format "%s = (%s %s) ;; shape: %s"
+            (:ref-name n)
+            (-> n :graph-op op-descriptor)
+            (str/join " " (map display-name (:children n)))
+            (:shape n))))
+
+(s/defn summarize-computation
+  "Create informative s-expression for computation"
+  ([target :- Node] (summarize-computation target 0))
+  ([target :- Node indent :- s/Int]
+   (str
+    (when (> indent 0)
+      (str "\n" (str/join (repeat indent "  "))))
+    (case (:type target)
+      :op
+      (format "(%s :shape %s %s)"
+              (-> target :graph-op op-descriptor)
+              (:shape target)
+              (str/join " " (map #(summarize-computation % (inc indent))
+                                 (:children target))))
+      :input
+      (format "input(%s, %s)" (:ref-name target) (:shape target))
+      ;; else
+      (throw (ex-info "Bad node to summarize" {:node target}))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Public Graph Operations
+
 
 (defn + [& inputs]
   (graph-edge (SumGraphOp.) inputs))
@@ -205,6 +243,31 @@
   (graph-edge (StrechGraphOp. dim-to-insert) [input]))
 
 (defmacro with-scope [^String scope-name & body]
-  `(binding [*current-input-scope* (conj *current-input-scope* (name ~scope-name))]
+  `(binding [*current-input-scope*
+             (conj *current-input-scope* (name ~scope-name))]
      ~@body))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Sample Graphs
+
+(def lr
+  (let [num-classes 2
+        num-feats 3
+        W (graph/input "W" [num-classes num-feats])
+        b (graph/strech (graph/input "bias" [num-classes]) 1)
+        feat-vec (graph/strech (graph/input "f" [num-feats]) 1)
+        activations (graph/squeeze (graph/+ (graph/* W feat-vec) b) 1)
+        probs (graph/soft-max activations)
+        label (graph/input "label" [1])
+        loss (graph/cross-entropy-loss probs label)]
+    {:loss loss
+     :activations activations}))
+
+
+(def simple-graph
+  (let [X (graph/input "X" [2 2])
+        Y (graph/input "Y" [2 2])
+        Z (graph/input "Z" [2 2])]
+    (graph/* Z (graph/+ X Y))))
+
 
