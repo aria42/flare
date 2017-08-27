@@ -33,22 +33,22 @@
     (ensure-valid?! tensor-op children)
     tensor-op))
 
-(defn compile-walk [node compiled-children factory]
+(defn compile-walk [node children factory]
   (-> node
       ;; always add value tensor
       (assoc :value (tensors/zeros factory (:shape node)))
       ;; add tensor op for graph ops
       (p/?>  (= :op (:type node))
-             (assoc :tensor-op (ensure-tensor-op factory node compiled-children)
+             (assoc :tensor-op (ensure-tensor-op factory node children)
                     )
       ;; add gradient for non-inputs
       (p/?> (not= :input (:type node))
             (assoc :grad (tensors/zeros factory (:shape node))))
       ;; add compiled children
-      (assoc :children compiled-children))))
+      (assoc :children children))))
 
 (defn validate-graph! [node]
-  (let [all-nodes (post-order-nodes node)
+  (let [all-nodes (graph/post-order-nodes node)
         type->nodes (group-by :type all-nodes)
         inputs (:input type->nodes)
         params (:params type->nodes)
@@ -57,11 +57,11 @@
       (throw (RuntimeException.
               (str "Reference to multiple nodes " (key duplicate)))))
     (when-let [bad-input (some (comp seq :children) inputs)]
-      (let [msg (str "Input needs to be leaf in graph: " (:ref-name bad-input))]
-        (throw (RuntimeException. msg))))
+      (throw (ex-info "Input needs to be leaf in graph"
+                      {:bad-ref-name bad-input})))
     (when-let [bad-params (some (comp seq :children) params)]
-      (let [msg (str "Params needs to be leaf in graph: " (:ref-name bad-params))]
-        (throw (RuntimeException. msg))))))
+      (throw (ex-info "Params needs to be leaf in graph"
+                      {:bad-ref-name bad-params})))))
 
 (s/defn compile-graph! :- CompiledNode
   [target-node :- graph/Node
@@ -83,12 +83,12 @@
   key on all compiled nodes. You can then look up and retrieve the tensors
   associated with any node"
   [target :- CompiledNode factory :- tensors/PFactory input->vals]
-  (let [input-nodes (:input (group-by :type (post-order-nodes target)))
-        provided-input-keys (set (keys input->vals))
-        existing-input-keys (set (map :ref-name input-nodes))]
+  (let [input-nodes (:input (group-by :type (graph/post-order-nodes target)))
+        provided-keys (set (keys input->vals))
+        existing-keys (set (map :ref-name input-nodes))]
     ;; Ensure provided expected input values
-    (when-let [missing (seq (set/difference existing-input-keys provided-input-keys ))]
-      (throw (RuntimeException. (str "Missing needed inputs: " missing))))
+    (when-let [missing (seq (set/difference existing-keys provided-keys))]
+      (throw (ex-info "Missing input needed" {:missing missing})))
     ;; Copy input values to node tensors
     (doseq [{:keys [value, ref-name]} input-nodes]
       (tensors/copy-from-input! factory value (get input->vals ref-name)))

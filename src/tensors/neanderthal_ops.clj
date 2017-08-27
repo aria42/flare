@@ -79,11 +79,11 @@
   compute/TensorOp
   (ensure-valid?! [this input-nodes]
     (when-not (= (count input-nodes) 1)
-      (throw (RuntimeException. "Must have one input")))
-    (ensure-vector-like?! (first input-nodes))
-    (doseq [n input-nodes] (ensure-valid-shape?! (:shape n)))
-    (when-not (= 2 (count input-nodes))
-      (throw (RuntimeException. "Must have two operators to MultTensorOp")))))
+      (throw (ex-info "Must have one input")))
+    (let [shape (:shape (first input-nodes))]
+      (when-not (tensors/vector-shape? shape)
+        (throw (ex-info "Not a vector shape" {:shape shape}))))
+    (doseq [n input-nodes] (ensure-valid-shape?! (:shape n)))))
 
 (defrecord CrossEntropyLossTensorOp []
   compute/TensorOp)
