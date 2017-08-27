@@ -103,12 +103,14 @@
      target
      (fn [node children]
        (if-not (seq children)
+         ;; leaf node has no computation
          node
+         ;; op node, fetch tensor-op
+         ;; execute forward computation
          (let [tensor-op (:tensor-op node)]
-           (println "tensor-op " tensor-op)
            (forward-node-pass! tensor-op node children)
            node))))
-    ;; Return
+    ;; Return original node
     target))
 
 (s/defn backward-pass!

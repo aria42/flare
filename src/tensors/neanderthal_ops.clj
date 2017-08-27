@@ -54,7 +54,23 @@
   (forward-node-pass! [this output! [input]]
     (let [squeeze-graph-op (:graph-op output!)
           dim-to-squeeze (:dim-to-squeeze squeeze-graph-op)]
-      (copy! (view-vctr (:value input) (:value output!)))))
+      (copy! (view-vctr (:value input)) (:value output!))))
+  (backward-node-pass! [this _ inputs!]
+    (doseq [input! inputs!]
+      (np/alter! (:value input!) (fn ^double [] 1.0)))))
+
+(defrecord StrechTensorOp []
+  compute/TensorOp
+  (ensure-valid?! [this input-nodes]
+    (let [shape (:shape (first input-nodes))]
+      (when-not (tensors/vector-shape? shape)
+        (throw (ex-info "Need vector shape" {:shape shape})))))
+  (forward-node-pass! [this output! [input]]
+    (let [strech-graph-op (:graph-op output!)
+          dim-to-insert (:dim-to-insert strech-graph-op)]
+      (if (= dim-to-insert 1)
+        (copy! (view-ge (:value input)) (:value output!))
+        (copy! (trans (view-ge (:value input))) (:value output!)))))
   (backward-node-pass! [this _ inputs!]
     (doseq [input! inputs!]
       (np/alter! (:value input!) (fn ^double [] 1.0)))))
@@ -77,6 +93,7 @@
    :* ->MultTensorOp
    :soft-max ->SoftMaxTensorOp
    :squeeze ->SqueezeTensorOp
+   :strech ->StrechTensorOp
    :cross-entropy-loss ->CrossEntropyLossTensorOp})
 
 (defrecord Factory []
