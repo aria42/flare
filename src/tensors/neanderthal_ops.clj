@@ -83,7 +83,19 @@
     (let [shape (:shape (first input-nodes))]
       (when-not (tensors/vector-shape? shape)
         (throw (ex-info "Not a vector shape" {:shape shape}))))
-    (doseq [n input-nodes] (ensure-valid-shape?! (:shape n)))))
+    (doseq [n input-nodes] (ensure-valid-shape?! (:shape n))))
+  (forward-node-pass! [this output! [input]]
+    (let [out (:value output!)
+          in (:value input)
+          max (double (entry in (imax in)))]
+      (copy! in out)
+      (alter! out (fn ^double [^double x]
+                    (if (> (- max x) 20.0)
+                      0.0
+                      (Math/exp x))))
+      (let [norm (sum out)]
+        (alter! out (fn ^double [^double x] (/ x norm)))
+        out))))
 
 (defrecord CrossEntropyLossTensorOp []
   compute/TensorOp)
