@@ -18,6 +18,13 @@
     (fn ^double []
       (+ lower (* (- upper lower) (.nextDouble r))))))
 
+(defmethod get-param-rng :normal
+  [{:keys [rand-seed, mean, sigma]}]
+  (let [mean (double (or mean 0.0))
+        sigma (double (or sigma 1.0))
+        r (java.util.Random. (long (or rand-seed 0)))]
+    (fn ^double []
+      (/ (+ (.nextGaussian r) mean) sigma))))
 
 (s/defn init-params
   [shape :- tensors/Shape

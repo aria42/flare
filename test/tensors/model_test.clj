@@ -26,5 +26,5 @@
 (deftest param-collection-test
   (let [model (simple-param-collection (no/->Factory))]
     (is (= (add-params! model "params" [2 2]
-                     {:type :uniform :lower -1.0 :upper 1.0 :rand-seed 0})
-        (get-params model "params")))))
+                     {:type :normal :rand-seed 0})
+           (get-params model "params")))))
