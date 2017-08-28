@@ -5,6 +5,7 @@
             [tensors.compute :as compute]
             [uncomplicate.neanderthal.core :as np]
             [uncomplicate.neanderthal.native :as native]
+            [uncomplicate.neanderthal.real :as real]
             [uncomplicate.neanderthal.internal.host.mkl :as mkl]
             [schema.core :as s]))
 
@@ -98,7 +99,19 @@
         out))))
 
 (defrecord CrossEntropyLossTensorOp []
-  compute/TensorOp)
+  compute/TensorOp
+  (ensure-valid?! [this [activations label]]
+    true)
+  (forward-node-pass! [this output! [activations-node label-node]]
+    (let [activations (-> activations-node :value)
+          label (-> label-node :value (entry 0) long)]
+      (when (>= label (dim activations))
+        (throw (ex-info "Label index out-of-bounds"
+                        {:label label
+                         :dim (dim activations)})))
+      (alter! (:value output!) 0
+              (fn ^double [^double _]
+                (Math/log (real/entry activations label)))))))
 
 (def ^:private +tensor-ops+
   {:+ ->SumTensorOp
