@@ -1,7 +1,8 @@
 (ns tensors.graph-test
   (:refer-clojure :exclude [+ *])
   (:require [clojure.test :refer :all]
-            [tensors.graph :refer :all]))
+            [tensors.graph :refer :all]
+            [tensors.core :as tensors]))
 
 (deftest scope-test
   (testing "nested scope"
@@ -49,4 +50,8 @@
           probs (soft-max (squeeze activations 1))
           label (input "label" [1])
           loss (cross-entropy-loss probs label)]
-      (= (:shape loss) [1]))))
+      (tensors/scalar-shape? (:shape loss)))))
+
+(deftest post-order-nodes-test
+  (let [g {:node :a :children [{:node :b} {:node :c}]}]
+    (is [:b :c :a] (map :node (post-order-nodes g)))))
