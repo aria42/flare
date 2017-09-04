@@ -18,9 +18,16 @@
          :grad s/Any))
 
 (defprotocol TensorOp
-  (ensure-valid?! [this input-nodes])
-  (forward-node-pass! [this output! inputs])
-  (backward-node-pass! [this output inputs!]))
+  (ensure-valid?! [this input-nodes]
+    "Ensure the operation can be perfed with the tensor operation. Some
+    imp0lemntations may support limited dimension or sizes")
+  (forward-node-pass! [this output! inputs]
+    "compute the forward pass of the algorithm, for each node, compute
+     `:value` tensor for passed in node, using the `:children` nodes
+      and their `:value` tensors`")
+  (backward-node-pass! [this output inputs!]
+    "compute the `:grad` gradient tensor on each node reaching down to the leaves
+     (which include the parameter nodes)"))
 
 (s/defschema CompiledOpNode
   "Compiled operation has a tensor operation associated with
@@ -57,8 +64,9 @@
         params (:params type->nodes)
         name->nodes (group-by :ref-name all-nodes)]
     (when-let [duplicate (some #(> (count (val %)) 1) name->nodes)]
-      (throw (RuntimeException.
-              (str "Reference to multiple nodes " (key duplicate)))))
+      (throw (ex-info "Reference to multiple nodes"
+                      {:duplicate duplicate}
+              (str  (key duplicate)))))
     (when-let [bad-input (some (comp seq :children) inputs)]
       (throw (ex-info "Input needs to be leaf in graph"
                       {:bad-ref-name bad-input})))
