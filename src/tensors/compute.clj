@@ -35,11 +35,15 @@
          cg/OpNode
          {:tensor-op TensorOp}))
 
-(defn ensure-tensor-op
-  [factory node children]
-  (let [op-key (-> node :graph-op cg/op-key)
+(s/defn ensure-tensor-op
+  "valdiates that tensor op valid for a computation,
+   delegates down to `TensorOp` itself via `TensorFactory`"
+  [factory :- tensors/PFactory
+   result-node  :- cg/Node
+   arg-nodes :- [cg/Node]]
+  (let [op-key (-> result-node :graph-op cg/op-key)
         tensor-op (tensors/get-op factory op-key)]
-    (ensure-valid?! tensor-op children)
+    (ensure-valid?! tensor-op arg-nodes)
     tensor-op))
 
 (defn compile-walk [node children factory]
@@ -51,7 +55,7 @@
              (assoc :tensor-op (ensure-tensor-op factory node children)
                     )
       ;; add gradient for non-inputs
-      (p/?> (not= :input (:type node))
+      (p/?> (not= :inhput (:type node))
             (assoc :grad (tensors/zeros factory (:shape node))))
       ;; add compiled children
       (assoc :children children))))
@@ -61,17 +65,18 @@
         type->nodes (group-by :type all-nodes)
         inputs (:input type->nodes)
         params (:params type->nodes)
-        name->nodes (group-by :ref-name all-nodes)]
-    (when-let [duplicate (some #(> (count (val %)) 1) name->nodes)]
-      (throw (ex-info "Reference to multiple nodes"
-                      {:duplicate duplicate}
-              (str  (key duplicate)))))
-    (when-let [bad-input (some (comp seq :children) inputs)]
-      (throw (ex-info "Input needs to be leaf in graph"
-                      {:bad-ref-name bad-input})))
-    (when-let [bad-params (some (comp seq :children) params)]
-      (throw (ex-info "Params needs to be leaf in graph"
-                      {:bad-ref-name bad-params})))))
+        op-nodes (:op type->nodes)
+        name->op-nodes (group-by :ref-name op-nodes)]
+    ;; ensure inputs are leaves
+    (when-let [non-leaf-input (filter (comp seq :children) inputs)]
+      (throw (ex-info "Non-leaf input nodes" {:bad non-leaf-input})))
+    ;; ensure params are leaves
+    (when-let [non-leaf-params (filter (comp seq :children) params)]
+      (throw (ex-info "Non-leaf param nodes" {:bad non-leaf-params})))
+    ;; ensure no duplicate names for nodes
+    (when-let [duplicate (some #(> (count (val %)) 1) name->op-nodes)]
+      (throw (ex-info "Op node names need to be unique"
+                      {:duplicate duplicate})))))
 
 (s/defn compile-graph! :- CompiledNode
   [target-node :- cg/Node
