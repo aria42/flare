@@ -1,4 +1,4 @@
-(ns tensors.model-test
+(ns tensors.params-test
   (:require [tensors.params :refer :all]
             [clojure.test :refer :all]
             [tensors.neanderthal-ops :as no]
