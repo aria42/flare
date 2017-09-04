@@ -1,5 +1,5 @@
 (ns tensors.model-test
-  (:require [tensors.model :refer :all]
+  (:require [tensors.params :refer :all]
             [clojure.test :refer :all]
             [tensors.neanderthal-ops :as no]
             [tensors.core :as tensors]
@@ -23,9 +23,3 @@
       [10]
       [3 2 3]
       [3 1])))
-
-(deftest param-collection-test
-  (let [model (simple-param-collection (no/->Factory))]
-    (is (= (add-params! model "params" [2 2]
-                     {:distribution :normal :rand-seed 0})
-           (get-params model "params")))))

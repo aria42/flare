@@ -1,7 +1,6 @@
 (ns tensors.compute
   (:require [tensors.computation-graph :as cg]
             [tensors.core :as tensors]
-            [tensors.model :as model]
             [tensors.graph :as graph]
             [plumbing.core :as p]
             [schema.core :as s]
@@ -128,11 +127,10 @@
   (def lr
     (let [num-classes 2
           num-feats 3
-          m (model/simple-param-collection)
-          W (model/add-params! m "W" [num-classes num-feats] {:type :normal})
-          b (model/add-params! m "bias" [num-feats] {:type :normal})
+          W (cg/params "W" [num-classes num-feats] {:type :normal})
+          b (cg/params "bias" [num-classes] {:type :normal})
           feat-vec (go/strech (cg/input "f" [num-feats]) 1)
-          activations (go/squeeze (go/+ (go/* W feat-vec) b) 1)
+          activations (go/squeeze (go/+ (go/* W feat-vec) (go/strech b 1)) 1)
           probs (go/soft-max activations)
           label (cg/input "label" [1])
           loss (go/cross-entropy-loss probs label)]

@@ -35,6 +35,7 @@
   (assoc Node
          :init InitParamSpec
          :type (s/eq :params)))
+
 (defprotocol GraphOp
   "Graph operation only needs to be aware of shape of output,
    independent of any tensor implementation."
