@@ -5,8 +5,7 @@
             [plumbing.core :as p]
             [schema.core :as s]
             [clojure.set :as set]
-            [tensors.graph-ops :as go]
-            [tensors.compute :as compute]))
+            [tensors.graph-ops :as go]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Compiled Graph Protocols + Operations

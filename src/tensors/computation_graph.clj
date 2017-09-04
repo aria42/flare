@@ -21,21 +21,6 @@
   "Input graph node schema"
   (assoc Node :type (s/eq :input)))
 
-(s/defschema InitParamSpec
-  "Spec for how to generate parameter entries independently
-  implement `get-param-rng` multi-method for `:distribution`
-  for a new distirbution"
-  {:distribution s/Keyword
-   s/Any s/Any})
-
-(defmulti ^clojure.lang.IFn$D get-param-rng :distribution)
-
-(s/defschema ParamsNode
-  "Params graph node schema"
-  (assoc Node
-         :init InitParamSpec
-         :type (s/eq :params)))
-
 (defprotocol GraphOp
   "Graph operation only needs to be aware of shape of output,
    independent of any tensor implementation."
@@ -68,7 +53,6 @@
   [^String node-name]
   (str/join "/" (conj *current-input-scope* node-name)))
 
-
 (defmacro with-scope [^String scope-name & body]
   `(binding [*current-input-scope*
              (conj *current-input-scope* (name ~scope-name))]
@@ -84,19 +68,6 @@
   ([shape :- tensors/Shape]
    (input (name (gensym "input")) shape)))
 
-
-(s/defn params :- ParamsNode
-  "Create params variable node. See \"params.clj\" for how we init"
-  ([shape :- tensors/Shape]
-   (params (name (gensym "params")) shape))
-  ([param-name :- String shape :- tensors/Shape]
-   (params param-name shape {:distribution :uniform :upper 1.0 :lower -1.0}))
-  ([param-name :- String shape :- tensors/Shape init-spec :- InitParamSpec]
-   {:type :params
-    :shape shape
-    :init init-spec
-    :ref-name (full-node-name param-name)}))
-
 (defmacro definput [input-var shape]
   `(def ~input-var (input ~(name input-var) ~shape)))
 
@@ -109,9 +80,8 @@
   {:type :op
    :shape (forward-shape op nodes)
    :graph-op op
-   :ref-name (gensym (str (name (op-key op)) ":")) 
+   :ref-name (gensym (str (name (op-key op)) ":"))
    :children nodes})
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Display/Summarize Graphs
@@ -132,8 +102,7 @@
             (:shape n))))
 
 (s/defn summarize-computation
-  "Create informative s-expression for computation"
-  ([target :- Node] (summarize-computation target 0))
+  "Create informative s-expression for computation"  
   ([target :- Node indent :- s/Int]
    (str
     (when (> indent 0)
@@ -148,4 +117,5 @@
       :input
       (format "input(%s, %s)" (:ref-name target) (:shape target))
       ;; else
-      (throw (ex-info "Bad node to summarize" {:node target}))))))
+      (throw (ex-info "Bad node to summarize" {:node target})))))
+  ([target :- Node] (summarize-computation target 0)))

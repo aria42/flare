@@ -33,11 +33,11 @@
 
 
 (deftest logistic-regression-test
-  (testing "create logistic regression graph"
+  (testing "create logistic regression graph (make parameters inputs)"
     (let [num-classes 2
           num-feats 10
-          W (cg/params "W" [num-classes num-feats])
-          b (cg/params "bias" [num-classes 1])
+          W (cg/input "W" [num-classes num-feats])
+          b (cg/input "bias" [num-classes 1])
           feat-vec (cg/input "f" [num-feats 1])
           activations (+ (* W feat-vec) b)
           probs (soft-max (squeeze activations 1))

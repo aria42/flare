@@ -1,8 +1,7 @@
-(ns tensors.graph  
+(ns tensors.graph
   (:require [schema.core :as s]
             [tensors.core :as tensors]
-            [clojure.string :as str]
-            [tensors.graph :as graph]))
+            [clojure.string :as str]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Graph Walks
