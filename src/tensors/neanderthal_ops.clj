@@ -7,7 +7,8 @@
             [uncomplicate.neanderthal.native :as native]
             [uncomplicate.neanderthal.real :as real]
             [uncomplicate.neanderthal.internal.host.mkl :as mkl]
-            [schema.core :as s]))
+            [schema.core :as s]
+            [plumbing.core :as p]))
 
 
 (defn ^:private valid-shape? [shape]
@@ -37,8 +38,8 @@
     (when-not (= 2 (count input-nodes))
       (throw (ex-info "Must have two arguments to MultTensorOp"))))
   (forward-node-pass! [this output! inputs]
-    (let [out (:value output!)
-          [a b] (map :value inputs)]
+    (let [out (p/safe-get output! :value)
+          [a b] (map #(p/safe-get % :value) inputs)]
       (scal! 0.0 out)
       (mm! 1.0 a b out)))
   (backward-node-pass! [this _ inputs!]
@@ -125,6 +126,10 @@
   tensors/PFactory
   (get-op [this op-key]
     ((get +tensor-ops+ op-key)))
+  (->clj [this tensor]
+    (if (vctr? tensor)
+      (seq tensor)
+      (doall (map seq (rows tensor)))))
   (from-nums [this nums]
     (let [shape (tensors/guess-shape nums)]
       (case (count shape)

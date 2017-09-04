@@ -31,5 +31,6 @@
   (from-nums [this nums])
   (get-op [this op-key])
   (zeros [this shape])
+  (->clj [this tensor])
   (copy-from-input! [this tensor! nums]))
 

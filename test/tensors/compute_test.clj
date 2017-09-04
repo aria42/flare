@@ -18,5 +18,25 @@
           input-vals {"X" [[1 2] [2 1]] "Y" [[1 2] [1 1]]}]
       (forward-pass! Z factory input-vals)
       (is (= [[2.0 4.0] [3.0 2.0]]
-             (tensors/->clj factory (:value Z)))))))
+             (tensors/->clj factory (:value Z))))
+      (is (= [[0.0 0.0] [0.0 0.0]]
+             (tensors/->clj factory (:grad Z))))))
+  (testing "lr graph"
+    (let [num-classes 2
+          num-feats 3
+          m (model/simple-param-collection)
+          factory (no/->Factory)
+          W (model/add-params! m [num-classes num-feats] :name "W")
+          b (model/add-params! m [num-classes] :name "b")
+          feat-vec (go/strech (cg/input "f" [num-feats]) 1)
+          activations (go/squeeze (go/+ (go/* W feat-vec) (go/strech b 1)) 1)
+          probs (go/soft-max activations)
+          label (cg/input "label" [1])
+          loss (go/cross-entropy-loss probs label)
+          _ (model/init! m (no/->Factory))
+          loss (compile-graph loss factory m)]
+      (forward-pass! loss factory {"f" [1 1 1] "label" [0]})
+      (is (neg? (first (tensors/->clj factory (:value loss))))))
+    )
+  )
 

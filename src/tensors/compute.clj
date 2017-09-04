@@ -5,7 +5,8 @@
             [plumbing.core :as p]
             [schema.core :as s]
             [clojure.set :as set]
-            [tensors.graph-ops :as go]))
+            [tensors.graph-ops :as go]
+            [tensors.model :as model]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Compiled Graph Protocols + Operations
@@ -45,18 +46,19 @@
     (ensure-valid?! tensor-op arg-nodes)
     tensor-op))
 
-(defn compile-walk [node children factory]
-  (-> node
-      ;; always add value tensor of all zeros
-      (assoc :value (tensors/zeros factory (:shape node)))
-      ;; add tensor op for graph ops
-      (p/?>  (= :op (:type node))
-             (assoc :tensor-op (ensure-tensor-op factory node children)))
-      ;; add gradient for non-inputs
-      (p/?> (not= :input (:type node))
-            (assoc :grad (tensors/zeros factory (:shape node))))
-      ;; add compiled children
-      (assoc :children children)))
+(defn with-tensors [node factory model]
+  (case (:type node)
+    ;; don't need a gradient for inputs
+    :input  (assoc node :value (tensors/zeros factory (:shape node)))
+    :params (model/canonical-node model (:ref-name node))
+    :op     (assoc node
+                   :value (tensors/zeros factory (:shape node))
+                   :grad (tensors/zeros factory (:shape node)))))
+
+(defn with-tensor-op [node factory children]
+  (if (= (:type node) :op)
+    (assoc node :tensor-op (ensure-tensor-op factory node children))
+    node))
 
 (defn validate-graph! [node]
   (let [all-nodes (graph/post-order-nodes node)
@@ -76,14 +78,17 @@
       (throw (ex-info "Op node names need to be unique"
                       {:duplicate duplicate})))))
 
-(s/defn compile-graph! :- CompiledNode
+(s/defn compile-graph :- CompiledNode
   [target-node :- cg/Node
-   factory :- tensors/PFactory]
+   factory :- tensors/PFactory
+   model :- model/PModel]
   (validate-graph! target-node)
-  (let [compiled-target (graph/bottom-up-walk
-                         target-node
-                         (fn [node children]
-                           (compile-walk node children factory)))
+  (let [compile-walk (fn [node children]
+                       (-> node
+                           (with-tensors factory model)
+                           (with-tensor-op factory children)
+                           (assoc :children children)))
+        compiled-target (graph/bottom-up-walk  target-node compile-walk)
         compiled-nodes (graph/post-order-nodes compiled-target)
         input->vals (p/for-map [n compiled-nodes :when (= :input(:type n))]
                                (:ref-name n) (:value n))]
@@ -115,6 +120,7 @@
          ;; op node, fetch tensor-op
          ;; execute forward computation
          (let [tensor-op (:tensor-op node)]
+           (p/safe-get node :value)
            (forward-node-pass! tensor-op node children)
            node))))
     ;; Return original node
