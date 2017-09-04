@@ -1,16 +1,19 @@
 (ns tensors.compute
-  (:require [tensors.graph :as graph]
+  (:require [tensors.computation-graph :as cg]
             [tensors.core :as tensors]
+            [tensors.model :as model]
+            [tensors.graph :as graph]
             [plumbing.core :as p]
             [schema.core :as s]
             [clojure.set :as set]
+            [tensors.graph-ops :as go]
             [tensors.compute :as compute]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Compiled Graph Protocols + Operations
 
 (s/defschema CompiledNode
-  (assoc graph/Node
+  (assoc cg/Node
          :value s/Any
          :grad s/Any))
 
@@ -23,12 +26,12 @@
   "Compiled operation has a tensor operation associated with
   with the CompiledNode as well as the graph operation definition"
   (merge CompiledNode
-         graph/OpNode
+         cg/OpNode
          {:tensor-op TensorOp}))
 
 (defn ensure-tensor-op
   [factory node children]
-  (let [op-key (-> node :graph-op graph/op-key)
+  (let [op-key (-> node :graph-op cg/op-key)
         tensor-op (tensors/get-op factory op-key)]
     (ensure-valid?! tensor-op children)
     tensor-op))
@@ -64,7 +67,7 @@
                       {:bad-ref-name bad-params})))))
 
 (s/defn compile-graph! :- CompiledNode
-  [target-node :- graph/Node
+  [target-node :- cg/Node
    factory :- tensors/PFactory]
   (validate-graph! target-node)
   (let [compiled-target (graph/bottom-up-walk
@@ -113,22 +116,24 @@
   [target :- CompiledNode])
 
 
-(def lr
-  (let [num-classes 2
-        num-feats 3
-        W (graph/input "W" [num-classes num-feats])
-        b (graph/strech (graph/input "bias" [num-classes]) 1)
-        feat-vec (graph/strech (graph/input "f" [num-feats]) 1)
-        activations (graph/squeeze (graph/+ (graph/* W feat-vec) b) 1)
-        probs (graph/soft-max activations)
-        label (graph/input "label" [1])
-        loss (graph/cross-entropy-loss probs label)]
-    {:loss loss
-     :activations activations}))
+(comment 
+  (def lr
+    (let [num-classes 2
+          num-feats 3
+          m (model/simple-param-collection)
+          W (model/add-params! m "W" [num-classes num-feats] {:type :normal})
+          b (model/add-params! m "bias" [num-feats] {:type :normal})
+          feat-vec (go/strech (cg/input "f" [num-feats]) 1)
+          activations (go/squeeze (go/+ (go/* W feat-vec) b) 1)
+          probs (go/soft-max activations)
+          label (cg/input "label" [1])
+          loss (go/cross-entropy-loss probs label)]
+      {:loss loss
+       :activations activations}))
 
 
-(def simple-graph
-  (let [X (graph/input "X" [2 2])
-        Y (graph/input "Y" [2 2])
-        Z (graph/input "Z" [2 2])]
-    (graph/* Z (graph/+ X Y))))
+  (def simple-graph
+    (let [X (graph/input "X" [2 2])
+          Y (graph/input "Y" [2 2])
+          Z (graph/input "Z" [2 2])]
+      (graph/* Z (graph/+ X Y)))))

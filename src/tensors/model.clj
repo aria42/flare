@@ -2,15 +2,13 @@
   (:import [java.util HashMap Map])
   (:require [schema.core :as s]
             [tensors.core :as tensors]
-            [tensors.graph :as graph]))
+            [tensors.computation-graph :as cg]))
 
 (defprotocol PParameterCollection
   (add-params! [this param-name shape init-spec])
   (get-params [this param-name]))
 
-(defmulti get-param-rng :type)
-
-(defmethod get-param-rng :uniform
+(defmethod cg/get-param-rng :uniform
   [{:keys [rand-seed, lower, upper]}]
   (let [lower (double (or lower -1.0))
         upper (double (or upper 1.0))
@@ -18,7 +16,7 @@
     (fn ^double []
       (+ lower (* (- upper lower) (.nextDouble r))))))
 
-(defmethod get-param-rng :normal
+(defmethod cg/get-param-rng :normal
   [{:keys [rand-seed, mean, sigma]}]
   (let [mean (double (or mean 0.0))
         sigma (double (or sigma 1.0))
@@ -42,8 +40,8 @@
   (get-params [this param-name]
     (.get param-name->node param-name))
   (add-params! [this param-name shape init-spec]
-    (let [param-name (graph/full-node-name param-name)
-          get-param (get-param-rng init-spec)
+    (let [param-name (cg/full-node-name param-name)
+          get-param (cg/get-param-rng init-spec)
           init-vals (init-params shape get-param)
           params {:type :params
                   :shape shape
