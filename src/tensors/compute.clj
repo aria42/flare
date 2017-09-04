@@ -48,17 +48,16 @@
 
 (defn compile-walk [node children factory]
   (-> node
-      ;; always add value tensor
+      ;; always add value tensor of all zeros
       (assoc :value (tensors/zeros factory (:shape node)))
       ;; add tensor op for graph ops
       (p/?>  (= :op (:type node))
-             (assoc :tensor-op (ensure-tensor-op factory node children)
-                    )
+             (assoc :tensor-op (ensure-tensor-op factory node children)))
       ;; add gradient for non-inputs
-      (p/?> (not= :inhput (:type node))
+      (p/?> (not= :input (:type node))
             (assoc :grad (tensors/zeros factory (:shape node))))
       ;; add compiled children
-      (assoc :children children))))
+      (assoc :children children)))
 
 (defn validate-graph! [node]
   (let [all-nodes (graph/post-order-nodes node)
@@ -68,10 +67,10 @@
         op-nodes (:op type->nodes)
         name->op-nodes (group-by :ref-name op-nodes)]
     ;; ensure inputs are leaves
-    (when-let [non-leaf-input (filter (comp seq :children) inputs)]
+    (when-let [non-leaf-input (seq (filter (comp seq :children) inputs))]
       (throw (ex-info "Non-leaf input nodes" {:bad non-leaf-input})))
     ;; ensure params are leaves
-    (when-let [non-leaf-params (filter (comp seq :children) params)]
+    (when-let [non-leaf-params (seq (filter (comp seq :children) params))]
       (throw (ex-info "Non-leaf param nodes" {:bad non-leaf-params})))
     ;; ensure no duplicate names for nodes
     (when-let [duplicate (some #(> (count (val %)) 1) name->op-nodes)]
@@ -126,25 +125,3 @@
   "backward-pass through all the parameter nodes associated with
    the graph computation, will write to `:grad` key for all nodes"
   [target :- CompiledNode])
-
-
-(comment 
-  (def lr
-    (let [num-classes 2
-          num-feats 3
-          W (cg/params "W" [num-classes num-feats] {:type :normal})
-          b (cg/params "bias" [num-classes] {:type :normal})
-          feat-vec (go/strech (cg/input "f" [num-feats]) 1)
-          activations (go/squeeze (go/+ (go/* W feat-vec) (go/strech b 1)) 1)
-          probs (go/soft-max activations)
-          label (cg/input "label" [1])
-          loss (go/cross-entropy-loss probs label)]
-      {:loss loss
-       :activations activations}))
-
-
-  (def simple-graph
-    (let [X (graph/input "X" [2 2])
-          Y (graph/input "Y" [2 2])
-          Z (graph/input "Z" [2 2])]
-      (graph/* Z (graph/+ X Y)))))
