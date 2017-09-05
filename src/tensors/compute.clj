@@ -138,9 +138,17 @@
     ;; Return original node
     target))
 
+(defn backward-pass-walk
+  [node children]
+  (when (= :op (:type node))
+    (let [tensor-op (p/safe-get node :tensor-op)]
+      (doseq [c children]
+        (backward-node-pass! tensor-op node children))))
+  (assoc node :children children))
+
 (s/defn backward-pass!
   "backward-pass through all the parameter nodes associated with
    the graph computation, will write to `:grad` key for all nodes
    that have gradients (basically non-inputs) in graph"
   [target :- CompiledRootNode]
-  )
+  (graph/top-down-walk target backward-pass-walk))
