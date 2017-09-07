@@ -39,8 +39,7 @@
           W (cg/input "W" [num-classes num-feats])
           b (cg/input "bias" [num-classes 1])
           feat-vec (cg/input "f" [num-feats 1])
-          activations (+ (* W feat-vec) b)
-          probs (soft-max (squeeze activations 1))
+          activations (squeeze (+ (* W feat-vec) b) 1)
           label (cg/input "label" [1])
-          loss (cross-entropy-loss probs label)]
+          loss (cross-entropy-loss activations label)]
       (tensors/scalar-shape? (:shape loss)))))

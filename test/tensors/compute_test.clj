@@ -30,9 +30,8 @@
           b (model/add-params! m [num-classes] :name "b")
           feat-vec (go/strech (cg/input "f" [num-feats]) 1)
           activations (go/squeeze (go/+ (go/* W feat-vec) (go/strech b 1)) 1)
-          probs (go/soft-max activations)
           label (cg/input "label" [1])
-          loss (go/cross-entropy-loss probs label)
+          loss (go/cross-entropy-loss activations label)
           _ (model/init! m (no/->Factory))
           loss (compile-graph loss factory m)]
       (forward-pass! loss factory {"f" [1 1 1] "label" [0]})

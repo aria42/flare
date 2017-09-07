@@ -23,10 +23,12 @@
   (forward-node-pass! [this output! inputs]
     "compute the forward pass of the algorithm, for each node, compute
      `:value` tensor for passed in node, using the `:children` nodes
-      and their `:value` tensors`")
+      and their `:value` tensors. Returns the node in case any other
+      computations are added to the node for use in the backward pass.")
   (backward-node-pass! [this output inputs!]
     "compute the `:grad` gradient tensor on each node reaching down to the leaves
-     (which include the parameter nodes)"))
+     (which include the parameter nodes). Returns the node so that downstream
+     backward-node-pass! calls can use added data."))
 
 (s/defschema CompiledOpNode
   "Compiled operation has a tensor operation associated with
@@ -133,18 +135,17 @@
          ;; execute forward computation
          (let [tensor-op (:tensor-op node)]
            (p/safe-get node :value)
-           (forward-node-pass! tensor-op node children)
-           node))))
+           (forward-node-pass! tensor-op node children)))))
     ;; Return original node
     target))
 
 (defn backward-pass-walk
   [node children]
-  (when (= :op (:type node))
+  (if-not (= :op (:type node))
+    (assoc node :children children)
     (let [tensor-op (p/safe-get node :tensor-op)]
-      (doseq [c children]
-        (backward-node-pass! tensor-op node children))))
-  (assoc node :children children))
+      (assoc node :children
+             (mapv #(backward-node-pass! tensor-op node %) children)))))
 
 (s/defn backward-pass!
   "backward-pass through all the parameter nodes associated with

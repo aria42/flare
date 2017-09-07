@@ -85,16 +85,6 @@
                (when (< (inc dim-to-insert) (count shape))
                  (subvec shape (inc dim-to-insert))))))))
 
-(defrecord SoftMaxOp []
-  cg/GraphOp
-  (op-key [this] :soft-max)
-  (op-descriptor [this] "soft-max")
-  (op-validate! [this inputs]
-    (when (not= (count inputs) 1)
-      (throw (ex-info "Exactly one input required"))))
-  (forward-shape [this input-nodes]
-    (:shape (first input-nodes))))
-
 (defrecord CrossEntropyLossOp []
   cg/GraphOp
   (op-key [this] :cross-entropy-loss)
@@ -121,9 +111,6 @@
 
 (defn * [& inputs]
   (cg/add-graph-op (MultGraphOp.) inputs))
-
-(defn soft-max [input]
-  (cg/add-graph-op (SoftMaxOp.) [input]))
 
 (defn cross-entropy-loss [activations label]
   (cg/add-graph-op (CrossEntropyLossOp.) [activations label]))
