@@ -20,15 +20,16 @@
   (ensure-valid?! [this input-nodes]
     "Ensure the operation can be perfed with the tensor operation. Some
     imp0lemntations may support limited dimension or sizes")
-  (forward-node-pass! [this output! inputs]
+  (forward-node-pass! [this node]
     "compute the forward pass of the algorithm, for each node, compute
      `:value` tensor for passed in node, using the `:children` nodes
       and their `:value` tensors. Returns the node in case any other
       computations are added to the node for use in the backward pass.")
-  (backward-node-pass! [this output inputs!]
-    "compute the `:grad` gradient tensor on each node reaching down to the leaves
-     (which include the parameter nodes). Returns the node so that downstream
-     backward-node-pass! calls can use added data."))
+  (backward-node-pass! [this node]
+    "compute the `:grad` gradient tensor on each child of passed in node reaching
+     down to the leaves  (which include the parameter nodes).
+     Returns the node so that downstream backward-node-pass!
+     calls can use added data."))
 
 (s/defschema CompiledOpNode
   "Compiled operation has a tensor operation associated with
@@ -68,9 +69,9 @@
                    :value (tensors/zeros factory (:shape node))
                    :grad (tensors/zeros factory (:shape node)))))
 
-(defn with-tensor-op [node factory children]
+(defn with-tensor-op [node factory]
   (if (= (:type node) :op)
-    (assoc node :tensor-op (ensure-tensor-op factory node children))
+    (assoc node :tensor-op (ensure-tensor-op factory node (:children node)))
     node))
 
 (defn validate-graph! [node]
@@ -96,11 +97,10 @@
    factory :- tensors/PFactory
    model :- model/PModel]
   (validate-graph! target-node)
-  (let [compile-walk (fn [node children]
+  (let [compile-walk (fn [node]
                        (-> node
                            (with-tensors factory model)
-                           (with-tensor-op factory children)
-                           (assoc :children children)))
+                           (with-tensor-op factory)))
         compiled-target (graph/bottom-up-walk  target-node compile-walk)
         compiled-nodes (graph/post-order-nodes compiled-target)
         input->vals (p/for-map [n compiled-nodes :when (= :input(:type n))]
@@ -127,25 +127,24 @@
     ;; Bottom up walk to compute forward values
     (graph/bottom-up-walk
      target
-     (fn [node children]
-       (if-not (seq children)
+     (fn [node]
+       (if-not (seq (:children node))
          ;; leaf node has no computation
          node
          ;; op node, fetch tensor-op
          ;; execute forward computation
          (let [tensor-op (:tensor-op node)]
            (p/safe-get node :value)
-           (forward-node-pass! tensor-op node children)))))
+           (forward-node-pass! tensor-op node)))))
     ;; Return original node
     target))
 
 (defn backward-pass-walk
-  [node children]
+  [node]
   (if-not (= :op (:type node))
-    (assoc node :children children)
+    node
     (let [tensor-op (p/safe-get node :tensor-op)]
-      (assoc node :children
-             (mapv #(backward-node-pass! tensor-op node %) children)))))
+      (backward-node-pass! tensor-op node))))
 
 (s/defn backward-pass!
   "backward-pass through all the parameter nodes associated with

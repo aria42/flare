@@ -22,18 +22,22 @@
   compute/TensorOp
   (ensure-valid?! [this input-nodes]
     (doseq [n input-nodes] (ensure-valid-shape?! (:shape n))))
-  (forward-node-pass! [this output! inputs]
-    (copy! (:value (first inputs)) (:value output!))
-    (doseq [input (rest inputs)]
-      (np/axpy! 1.0 (:value input) (:value output!)))
-    output!)
-  (backward-node-pass! [this output inputs!]
+  (forward-node-pass! [this node]
+    (let [output (:value node)
+          inputs (mapv :value (:children node))]
+      (copy! (first inputs) output)
+      (doseq [input (rest inputs)]
+        (np/axpy! 1.0 input output)))
+    node)
+  (backward-node-pass! [this node]
     ;; x = x1 + ... + xn
     ;; dxi/dt = dx/dt * 1
     ;; so just add output grad to inputs
-    (doseq [input! inputs!]
-      (np/axpy! (:grad output) (:grad inputs!)))
-    output))
+    (let [df_dt (:grad node)
+          input-grads (mapv :grad (:children node))]
+      (doseq [input-grad input-grads]
+        (np/axpy! df_dt input-grad)))
+    node))
 
 (defrecord MultTensorOp []
   compute/TensorOp
@@ -41,23 +45,24 @@
     (doseq [n input-nodes] (ensure-valid-shape?! (:shape n)))
     (when-not (= 2 (count input-nodes))
       (throw (ex-info "Must have two arguments to MultTensorOp"))))
-  (forward-node-pass! [this output! inputs]
-    (let [out (p/safe-get output! :value)
-          [a b] (map #(p/safe-get % :value) inputs)]
+  (forward-node-pass! [this node]
+    (let [out (p/safe-get node :value)
+          [a b] (mapv #(p/safe-get % :value) (:children node))]
       (scal! 0.0 out)
       (mm! 1.0 a b out))
-    output!)
-  (backward-node-pass! [this output inputs!]
+    node)
+  (backward-node-pass! [this node]
     ;; Z[m,n] = X[m,k] Y[k,n]
     ;; dX/dt[m,k] = dZ/dt[m,n] Y^T [n, k]
-    (let [dZ (p/safe-get output :grad)
-          [X Y] (map #(p/safe-get % :value) inputs!)
-          [dX dY] (map #(p/safe-get % :grad) inputs!)]
+    (let [dZ (p/safe-get node :grad)
+          cs (:children node)
+          [X Y] (mapv #(p/safe-get % :value) cs)
+          [dX dY] (mapv #(p/safe-get % :grad) cs)]
       ;; update dX
       (np/mm! 1.0 dZ 1.0 (trans Y) dX)
       ;; update dY
       (np/mm! 1.0 dZ 1.0 (trans X) dY))
-    output))
+    node))
 
 
 (defrecord SqueezeTensorOp []
@@ -66,12 +71,16 @@
     (when-not (= 2 (count (:shape (first input-nodes))))
       (throw (ex-info "Need matrix shape"
                       {:shape (:shape (first input-nodes))}))))
-  (forward-node-pass! [this output! [input]]
-    (copy! (view-vctr (:value input)) (:value output!))
-    output!)
-  (backward-node-pass! [this output inputs!]
-    (copy! (view-vctr (:grad output)) (:grad (first inputs!)))
-    output))
+  (forward-node-pass! [this node]
+    (let [output (:value node)
+          input (-> node :children first :value)]
+      (copy! (view-vctr input) output))
+    node)
+  (backward-node-pass! [this node]
+    (let [out-grad (:grad node)
+          in-grad (-> node :children first :grad)]
+      (copy! (view-vctr out-grad) in-grad))
+    node))
 
 (defrecord StrechTensorOp []
   compute/TensorOp
@@ -79,20 +88,24 @@
     (let [shape (:shape (first input-nodes))]
       (when-not (tensors/vector-shape? shape)
         (throw (ex-info "Need vector shape" {:shape shape})))))
-  (forward-node-pass! [this output! [input]]
-    (let [strech-graph-op (:graph-op output!)
-          dim-to-insert (:dim-to-insert strech-graph-op)]
+  (forward-node-pass! [this node]
+    (let [strech-graph-op (:graph-op node)
+          dim-to-insert (:dim-to-insert strech-graph-op)
+          output (:value node)
+          input (-> node :children first :value)]
       (if (= dim-to-insert 1)
-        (copy! (view-ge (:value input)) (:value output!))
-        (copy! (trans (view-ge (:value input))) (:value output!)))
-      output!))
-  (backward-node-pass! [this output [input!]]
-    (let [strech-graph-op (:graph-op output)
-          dim-to-insert (:dim-to-insert strech-graph-op)]
+        (copy! (view-ge input) output)
+        (copy! (trans (view-ge input)) output)))
+    node)
+  (backward-node-pass! [this node]
+    (let [strech-graph-op (:graph-op node)
+          dim-to-insert (:dim-to-insert strech-graph-op)
+          out-grad (:grad node)
+          in-grad (-> node :children first :grad)]
       (if (= dim-to-insert 1)
-        (axpy! (:grad output) (view-ge (:grad input!)))
-        (axpy! (:grad output) (view-ge (:grad input!)))))
-    output))
+        (axpy! out-grad (view-ge in-grad))
+        (axpy! out-grad (view-ge in-grad))))
+    node))
 
 (defn soft-max [scores]
   (let [probs (copy scores)]
@@ -107,8 +120,9 @@
   compute/TensorOp
   (ensure-valid?! [this [activations label]]
     true)
-  (forward-node-pass! [this output! [activations-node label-node]]
-    (let [activations (-> activations-node :value)
+  (forward-node-pass! [this node]
+    (let [[activations-node label-node] (:children node)
+          activations (-> activations-node :value)
           probs (soft-max activations)
           label (-> label-node :value (entry 0) long)
           correct-prob (real/entry probs label)]
@@ -116,20 +130,26 @@
         (throw (ex-info "Label index out-of-bounds"
                         {:label label
                          :dim (dim activations)})))
-      (alter! (:value output!) 0
+      (alter! (:value node) 0
               (fn ^double [^double _]
-                (Math/log correct-prob)))))
-  (backward-node-pass! [this output [activations-node! label-node]]
-    ;; l = (i == label) log(pi)
-    (when-let [g (:grad label-node)]
-      (throw (ex-info "Don't support label differentiation")))
-    ;; d pi / dt = dl/dt (1.0/pi)
-    (let [gold-idx (long (first (:value label-node)))
-          activations (:value activations-node!)]
-      (alter! (:grad activations-node!) gold-idx
-              (fn ^double [^long idx]
-                (/ (real/entry (:grad output) idx)
-                   (real/entry activations idx)))))))
+                (Math/log correct-prob))))
+    node)
+  (backward-node-pass! [this node]
+    (let [[activations-node label-node] (:children node)
+          probs (soft-max (:value activations-node))
+          loss-grad-val (-> node :grad :value (real/entry 0))]
+      ;; l = (i == label) log(pi)
+      (when-let [g (:grad label-node)]
+        (throw (ex-info "Don't support label differentiation")))
+      ;; d pi / dt = dl/dt (1.0/pi)
+      (let [gold-idx (long (first (:value label-node)))
+            activations (:value activations-node)]
+        (alter! (:grad activations-node) gold-idx
+                (fn ^double [^long idx]
+                  (* loss-grad-val
+                     (- (real/entry probs idx)
+                        (if (= idx gold-idx) 1.0 0.0)))))))
+    node))
 
 (def ^:private +tensor-ops+
   {:+ ->SumTensorOp

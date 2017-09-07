@@ -10,10 +10,8 @@
   (testing "bottom-up walk"
     (let [g {:val :a :children [{:val :b :children [{:val :b1}]} {:val :c}]}
           counter (atom 0)
-          walk-fn (fn [n cs]
-                    (assoc n
-                           :stamp (swap! counter inc)
-                           :children cs))
+          walk-fn (fn [n]
+                    (assoc n :stamp (swap! counter inc)))
           walked (bottom-up-walk g walk-fn)]
       (doseq [n (reverse (post-order-nodes walked))
               c (:children n)]
@@ -23,7 +21,7 @@
   (testing "top-down walk"
     (let [g {:val :a :children [{:val :b :children [{:val :b1}]} {:val :c}]}
           counter (atom 0)
-          walk-fn (fn [n _]
+          walk-fn (fn [n]
                     (assoc n :stamp (swap! counter inc)))
           walked (top-down-walk g walk-fn)]
       (doseq [n (post-order-nodes walked)
