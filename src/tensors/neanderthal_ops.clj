@@ -89,22 +89,14 @@
       (when-not (tensors/vector-shape? shape)
         (throw (ex-info "Need vector shape" {:shape shape})))))
   (forward-node-pass! [this node]
-    (let [strech-graph-op (:graph-op node)
-          dim-to-insert (:dim-to-insert strech-graph-op)
-          output (:value node)
+    (let [output (:value node)
           input (-> node :children first :value)]
-      (if (= dim-to-insert 1)
-        (copy! (view-ge input) output)
-        (copy! (trans (view-ge input)) output)))
+      (copy! input (view-vctr output)))
     node)
   (backward-node-pass! [this node]
-    (let [strech-graph-op (:graph-op node)
-          dim-to-insert (:dim-to-insert strech-graph-op)
-          out-grad (:grad node)
+    (let [out-grad (:grad node)
           in-grad (-> node :children first :grad)]
-      (if (= dim-to-insert 1)
-        (axpy! out-grad (view-ge in-grad))
-        (axpy! out-grad (view-ge in-grad))))
+      (axpy! out-grad (view-ge in-grad)))
     node))
 
 (defn soft-max [scores]

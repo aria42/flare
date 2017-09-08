@@ -71,3 +71,23 @@
       (let [backward-node (compute/backward-node-pass! op node)]
         (is (= backward-node node))
         (is (= (:grad A) (dge 2 1[1 1])))))))
+
+
+(deftest strech-op
+  (testing "B = (strech A 1)"
+    (let [op (->StrechTensorOp)
+          A {:shape [2]
+             :value (dv [1 1])
+             :grad (dv [0 0])}
+          B {:shape [2 1]
+             :value (dge 2 1 [1 1])
+             :grad (dge 2 1 [1 1])}
+          node (assoc B :children [A])]
+      (compute/ensure-valid?! op [A])
+      (let [forward-node (compute/forward-node-pass! op node)]
+        (is (= forward-node node))
+        (is (= (:value B) (dge 2 1 [1 1]))))
+      ;; populate gradient of output
+      (let [backward-node (compute/backward-node-pass! op node)]
+        (is (= backward-node node))
+        (is (= (:grad A) (dv [1 1])))))))
