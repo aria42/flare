@@ -124,11 +124,11 @@
                          :dim (dim activations)})))
       (alter! (:value node) 0
               (fn ^double [^double _]
-                (Math/log correct-prob))))
-    node)
+                (Math/log correct-prob)))
+      (assoc node ::probs probs)))
   (backward-node-pass! [this node]
     (let [[activations-node label-node] (:children node)
-          probs (soft-max (:value activations-node))
+          probs (::probs node)
           loss-grad-val (-> node :grad :value (real/entry 0))]
       ;; l = (i == label) log(pi)
       (when-let [g (:grad label-node)]
