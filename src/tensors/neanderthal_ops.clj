@@ -79,7 +79,7 @@
   (backward-node-pass! [this node]
     (let [out-grad (:grad node)
           in-grad (-> node :children first :grad)]
-      (copy! (view-vctr out-grad) in-grad))
+      (copy! out-grad (view-vctr in-grad)))
     node))
 
 (defrecord StrechTensorOp []
