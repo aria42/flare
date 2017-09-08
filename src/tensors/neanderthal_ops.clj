@@ -59,9 +59,9 @@
           [X Y] (mapv #(p/safe-get % :value) cs)
           [dX dY] (mapv #(p/safe-get % :grad) cs)]
       ;; update dX
-      (np/mm! 1.0 dZ 1.0 (trans Y) dX)
+      (np/mm! 1.0 dZ (trans Y) dX)
       ;; update dY
-      (np/mm! 1.0 dZ 1.0 (trans X) dY))
+      (np/mm! 1.0 (trans X) dZ dY))
     node))
 
 

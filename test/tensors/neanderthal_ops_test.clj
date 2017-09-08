@@ -28,3 +28,27 @@
         (is (= backward-node node))
         (is (= (:grad B) (dge 2 2 [1 1 1 1])))
         (is (= (:grad A) (dge 2 2 [1 1 1 1])))))))
+
+(deftest mult-tensor-op
+  (testing "C = A B"
+    (let [op (->MultTensorOp)
+          A {:shape [2 1]
+             :value (dge 2 1 [1 2])
+             :grad (dge 2 1)}
+          B {:shape [1 2]
+             :value (dge 1 2 [3 4])
+             :grad (dge 1 2)}
+          C {:shape [2 2]
+             :value (dge 2 2)
+             :grad (dge 2 2)}
+          node (assoc C :children [A, B])]
+      (compute/ensure-valid?! op [A B])
+      (let [forward-node (compute/forward-node-pass! op node)]
+        (is (= forward-node node))
+        (is (= (:value C) (dge 2 2 [3 6 4 8]))))
+      ;; populate gradient of output
+      (copy! (dge 2 2 [1 1 1 1]) (:grad C))
+      (let [backward-node (compute/backward-node-pass! op node)]
+        (is (= backward-node node))
+        (is (= (:grad B) (dge 1 2 [3 3])))
+        (is (= (:grad A) (dge 2 1 [7 7])))))))
