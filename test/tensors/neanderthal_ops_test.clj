@@ -91,3 +91,38 @@
       (let [backward-node (compute/backward-node-pass! op node)]
         (is (= backward-node node))
         (is (= (:grad A) (dv [1 1])))))))
+
+(defn l2-dist [a b]
+  (->> (map (fn [x y] (Math/pow (double (- x y)) 2.0)) a b)
+       (reduce +)
+       Math/sqrt))
+
+(deftest cross-entropy-loss-op
+  (testing "loss = (cross-entropy scores label)"
+    (let [op (->CrossEntropyLossTensorOp)
+          scores {:shape [3]
+                  :value (dv [1 1.5 2])
+                  :grad (dv [0 0 0])}
+          label {:shape [1]
+                 :value (dv [1])}
+          loss {:shape [1]
+                :value (dv [0.0])
+                :grad (dv [1.0])}
+          node (assoc loss :children [scores label])]
+      (compute/ensure-valid?! op [scores label])
+      (let [forward-node (compute/forward-node-pass! op node)]
+        (is (<
+             (l2-dist
+              (:tensors.neanderthal-ops/probs forward-node)
+              (dv [ 0.186 0.307 0.506]))
+             0.001))
+        (let [loss-scalar (first (:value forward-node))
+              target-loss (- (Math/log 0.307))]
+          (is (< (Math/abs (- target-loss loss-scalar)) 0.001)))
+        ;; populate gradient of output
+        (let [backward-node (compute/backward-node-pass! op forward-node)]
+          (is (<
+               (l2-dist
+                (:grad scores)
+                [0.186 -0.693 0.506])
+               0.001)))))))

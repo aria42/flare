@@ -124,20 +124,20 @@
                          :dim (dim activations)})))
       (alter! (:value node) 0
               (fn ^double [^double _]
-                (Math/log correct-prob)))
+                (- (Math/log correct-prob))))
       (assoc node ::probs probs)))
   (backward-node-pass! [this node]
     (let [[activations-node label-node] (:children node)
           probs (::probs node)
-          loss-grad-val (-> node :grad :value (real/entry 0))]
+          loss-grad-val (-> node :grad (real/entry 0))]
       ;; l = (i == label) log(pi)
       (when-let [g (:grad label-node)]
         (throw (ex-info "Don't support label differentiation")))
       ;; d pi / dt = dl/dt (1.0/pi)
       (let [gold-idx (long (first (:value label-node)))
             activations (:value activations-node)]
-        (alter! (:grad activations-node) gold-idx
-                (fn ^double [^long idx]
+        (alter! (:grad activations-node)
+                (fn ^double [^long idx ^double _]
                   (* loss-grad-val
                      (- (real/entry probs idx)
                         (if (= idx gold-idx) 1.0 0.0)))))))

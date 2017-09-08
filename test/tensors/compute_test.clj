@@ -35,7 +35,7 @@
           _ (model/init! m (no/->Factory))
           loss (compile-graph loss factory m)]
       (forward-pass! loss factory {"f" [1 1 1] "label" [0]})
-      (is (neg? (first (tensors/->clj factory (:value loss))))))
+      (is (not (neg? (first (tensors/->clj factory (:value loss)))))))
     )
   )
 
