@@ -47,9 +47,6 @@
   (-add-params! [this param-name shape init-spec]
     "add parameters to the model, returns a param graph node. Some
      argument defaulting happens below so this is the internal method")
-  (init! [this tensor-factory]
-    "takes a `tensors/PFactory` and populates initial values
-     and zeros out gradients for all parameters")
   (canonical-node [this param-name]
     "returns a caonical `ParamNode` for the parameter. If parameters
      have been initialized, also returns `:value` and `:grad` tensor fields"))
@@ -67,7 +64,7 @@
   "Simple collection of parameters
    NOTE: The meta-data of the param-collection gives you access
    to the underlying data. Don't use it except for an emergency!"
-  []
+  [factory :- tensors/PFactory]
   (let [m (java.util.HashMap.)]
     (with-meta
       (reify
@@ -79,23 +76,16 @@
               (throw (ex-info "Existing param key" {:existing existing})))
             (let [node {:type :params
                         :ref-name param-name
+                        :value (tensors/zeros factory shape)
+                        :grad (tensors/zeros factory shape)
                         :shape shape
-                        :init init-spec}]
+                        :init init-spec}
+                  get-param-val (get-param-rng init-spec)]
+              ;; initialize param vals from init-spec
+              (tensors/fill! factory (:value node) get-param-val)
               (.put m param-name node)
               node)))
         (canonical-node [this param-name] (.get m param-name))
-        (init! [this factory]
-          (let [ks (keys m)]
-            (doseq [^java.util.Map$Entry e m]
-              (let [params (.getValue e)
-                    get-param-val (get-param-rng (:init params))
-                    ;; TODO: Refactor API to allow natively populating tensor
-                    ;; rather than first doing Clojure data structures to Tensor
-                    init-vals (init-params (:shape params) get-param-val)
-                    ;; bake values into tensor
-                    value (tensors/from-nums factory init-vals)
-                    grad (tensors/zeros factory (:shape params))]
-                (.setValue e (assoc params :value value :grad grad))))))
 
         clojure.lang.Seqable
         (seq [this]

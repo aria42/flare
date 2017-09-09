@@ -31,6 +31,9 @@
   (from-nums [this nums])
   (get-op [this op-key])
   (zeros [this shape])
+  (fill! [this tensor set-val-fn]
+    "`set-val-fn` is a function that returns a primitive double")
   (->clj [this tensor])
+  (grad-step! [this weight alpha grad])
   (copy-from-input! [this tensor! nums]))
 

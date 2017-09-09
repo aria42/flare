@@ -163,6 +163,11 @@
     (if (vctr? tensor)
       (seq tensor)
       (doall (map seq (rows tensor)))))
+  (fill! [this tensor set-val-fn]
+    (alter! tensor
+            (if (vctr? tensor)
+              (fn ^double [^long i ^double x] (^clojure.lang.IFn$D set-val-fn))
+              (fn ^double [^long i ^long j ^double x] (^clojure.lang.IFn$D set-val-fn)))))
   (from-nums [this nums]
     (let [shape (tensors/guess-shape nums)]
       (case (count shape)
@@ -172,11 +177,13 @@
         ;; else
         (let [err (str "Unallowed shape for neanderthal: " (vec shape))]
           (throw (RuntimeException. err))))))
+  (grad-step! [this weights alpha grad]
+    (axpy! (- (double alpha)) grad weights))
   (copy-from-input! [this tensor! nums]
     (copy! (tensors/from-nums this nums) tensor!))
   (zeros [this shape]
     (case (count shape)
       1 (dv (seq (double-array (first shape))))
       2 (dge (first shape) (second shape))
-      (let [err (str "Unallowed shape for neanderthal: " (vec shape))]
-        (throw (RuntimeException. err))))))
+      (throw (ex-info "Unallowed shape for neanderthal"
+                      {:shape (vec shape)})))))

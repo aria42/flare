@@ -28,19 +28,18 @@
 
 (deftest param-collection-test
   (testing "simple param collection test"
-    (let [m (simple-param-collection)
+    (let [m (simple-param-collection (no/->Factory))
           n (add-params! m  [2 2] :name "W")]
       (is (= n (canonical-node m "W")))
       (is (= n (get (into {} (seq m)) "W")))))
   (testing "disallow repeated names"
-    (let [m (simple-param-collection)]
+    (let [m (simple-param-collection (no/->Factory))]
       (add-params! m [2 2] :name "W")
       (is (thrown? Exception (add-params! m [2 2] "W")))))
   (testing "can init!"
-    (let [m (simple-param-collection)]
+    (let [m (simple-param-collection (no/->Factory))]
       (add-params! m [2 2] :name "W1")
       (add-params! m [2 2] :name "W2")
-      (init! m (no/->Factory))
       (doseq [k ["W1" "W2"]]
         (is (:value (canonical-node m k)))
         (is (:grad (canonical-node m k)))))))

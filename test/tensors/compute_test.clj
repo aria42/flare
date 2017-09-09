@@ -13,8 +13,8 @@
     (let [X (cg/input "X" [2 2])
           Y (cg/input "Y" [2 2])
           Z (go/+ X Y)
-          model (model/simple-param-collection)
           factory (no/->Factory)
+          model (model/simple-param-collection factory)
           Z (compile-graph Z factory model)
           input-vals {"X" [[1 2] [2 1]] "Y" [[1 2] [1 1]]}]
       (forward-pass! Z factory input-vals)
@@ -25,8 +25,8 @@
   (testing "lr graph"
     (let [num-classes 2
           num-feats 3
-          m (model/simple-param-collection)
           factory (no/->Factory)
+          m (model/simple-param-collection factory)
           W (model/add-params! m [num-classes num-feats] :name "W")
           b (model/add-params! m [num-classes] :name "b")
           feat-vec (go/strech (cg/input "f" [num-feats]) 1)
@@ -34,7 +34,6 @@
           ;; keep 1 as the "correct" label
           label (cg/input "label" [1])
           loss (go/cross-entropy-loss activations label)
-          _ (model/init! m (no/->Factory))
           loss (compile-graph loss factory m)]
       (let [input->vals {"f" [1 2 1] "label" [0]}
             one-grad (tensors/from-nums (no/->Factory) [1.0])
