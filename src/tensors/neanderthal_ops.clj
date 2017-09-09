@@ -35,7 +35,7 @@
     ;; so just add output grad to inputs
     (let [df_dt (:grad node)
           input-grads (mapv :grad (:children node))]
-      (doseq [input-grad input-grads]
+      (doseq [input-grad input-grads :when input-grad]
         (np/axpy! df_dt input-grad)))
     node))
 
@@ -59,9 +59,11 @@
           [X Y] (mapv #(p/safe-get % :value) cs)
           [dX dY] (mapv #(p/safe-get % :grad) cs)]
       ;; update dX
-      (np/mm! 1.0 dZ (trans Y) dX)
+      (when dX
+        (np/mm! 1.0 dZ (trans Y) dX))
       ;; update dY
-      (np/mm! 1.0 (trans X) dZ dY))
+      (when dY
+        (np/mm! 1.0 (trans X) dZ dY)))
     node))
 
 
@@ -79,7 +81,8 @@
   (backward-node-pass! [this node]
     (let [out-grad (:grad node)
           in-grad (-> node :children first :grad)]
-      (copy! out-grad (view-vctr in-grad)))
+      (when in-grad
+        (copy! out-grad (view-vctr in-grad))))
     node))
 
 (defrecord StrechTensorOp []
@@ -96,7 +99,8 @@
   (backward-node-pass! [this node]
     (let [out-grad (:grad node)
           in-grad (-> node :children first :grad)]
-      (axpy! out-grad (view-ge in-grad)))
+      (when in-grad
+        (axpy! out-grad (view-ge in-grad))))
     node))
 
 (defn soft-max [scores]
@@ -136,11 +140,12 @@
       ;; d pi / dt = dl/dt (1.0/pi)
       (let [gold-idx (long (first (:value label-node)))
             activations (:value activations-node)]
-        (alter! (:grad activations-node)
-                (fn ^double [^long idx ^double _]
-                  (* loss-grad-val
-                     (- (real/entry probs idx)
-                        (if (= idx gold-idx) 1.0 0.0)))))))
+        (when-let [act-grad (:grad activations-node)]
+          (alter! act-grad
+           (fn ^double [^long idx ^double _]
+             (* loss-grad-val
+                (- (real/entry probs idx)
+                   (if (= idx gold-idx) 1.0 0.0))))))))
     node))
 
 (def ^:private +tensor-ops+

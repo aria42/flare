@@ -5,6 +5,7 @@
             [tensors.graph-ops :as go]
             [tensors.neanderthal-ops :as no]
             [tensors.model :as model]
+            [uncomplicate.neanderthal.core :refer :all]
             [clojure.test :refer :all]))
 
 (deftest compile-forward-test
@@ -30,12 +31,25 @@
           b (model/add-params! m [num-classes] :name "b")
           feat-vec (go/strech (cg/input "f" [num-feats]) 1)
           activations (go/squeeze (go/+ (go/* W feat-vec) (go/strech b 1)) 1)
+          ;; keep 1 as the "correct" label
           label (cg/input "label" [1])
           loss (go/cross-entropy-loss activations label)
           _ (model/init! m (no/->Factory))
           loss (compile-graph loss factory m)]
-      (forward-pass! loss factory {"f" [1 1 1] "label" [0]})
-      (is (not (neg? (first (tensors/->clj factory (:value loss)))))))
+      (let [input->vals {"f" [1 2 1] "label" [0]}
+            one-grad (tensors/from-nums (no/->Factory) [1.0])
+            loss (-> loss
+                     (forward-pass! factory input->vals)
+                     (assoc :grad one-grad))]
+        (is (not (neg? (first (tensors/->clj factory (:value loss))))))
+        (backward-pass! loss)
+        (let [W-grad (:grad (model/canonical-node m "W"))
+              [wrong-row right-row] (rows W-grad)]
+          ;; the incorrect label should get neg gradient
+          (is (every? neg? wrong-row))
+          ;; the correct label should get neg gradient
+          (is (every? pos? right-row)))
+        loss))
     )
   )
 

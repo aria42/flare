@@ -135,9 +135,7 @@
          ;; execute forward computation
          (let [tensor-op (:tensor-op node)]
            (p/safe-get node :value)
-           (forward-node-pass! tensor-op node)))))
-    ;; Return original node
-    target))
+           (forward-node-pass! tensor-op node)))))))
 
 (defn backward-pass-walk
   [node]
