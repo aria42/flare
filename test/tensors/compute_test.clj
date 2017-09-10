@@ -17,11 +17,11 @@
           model (model/simple-param-collection factory)
           Z (compile-graph Z factory model)
           input-vals {"X" [[1 2] [2 1]] "Y" [[1 2] [1 1]]}]
-      (forward-pass! Z factory input-vals)
+      (forward-pass! Z input-vals)
       (is (= [[2.0 4.0] [3.0 2.0]]
-             (tensors/->clj factory (:value Z))))
+             (tensors/->clj (:factory Z) (:value Z))))
       (is (= [[0.0 0.0] [0.0 0.0]]
-             (tensors/->clj factory (:grad Z))))))
+             (tensors/->clj (:factory Z) (:grad Z))))))
   (testing "lr graph"
     (let [num-classes 2
           num-feats 3
@@ -36,9 +36,9 @@
           loss (go/cross-entropy-loss activations label)
           loss (compile-graph loss factory m)]
       (let [input->vals {"f" [1 2 1] "label" [0]}
-            one-grad (tensors/from-nums (no/->Factory) [1.0])
+            one-grad (tensors/from-nums factory [1.0])
             loss (-> loss
-                     (forward-pass! factory input->vals)
+                     (forward-pass! input->vals)
                      (assoc :grad one-grad))]
         (is (not (neg? (first (tensors/->clj factory (:value loss))))))
         (backward-pass! loss)

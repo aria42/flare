@@ -78,6 +78,7 @@
                         :ref-name param-name
                         :value (tensors/zeros factory shape)
                         :grad (tensors/zeros factory shape)
+                        :factory factory
                         :shape shape
                         :init init-spec}
                   get-param-val (get-param-rng init-spec)]

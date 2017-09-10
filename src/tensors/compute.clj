@@ -13,6 +13,7 @@
 
 (s/defschema CompiledNode
   (assoc cg/Node
+         :factory tensors/PFactory
          :value s/Any
          :grad s/Any))
 
@@ -44,10 +45,7 @@
          ;; contains model for underlying parameters
          ;; used to fill values with model values
          ;; to allow for parameter sharing
-         :model model/PModel
-         ;; cached mapping of input ref names
-         ;; to underlying tensors to allow population
-         :input->vals {s/Str s/Any}))
+         :model model/PModel))
 
 (s/defn ensure-tensor-op
   "valdiates that tensor op valid for a computation,
@@ -99,31 +97,34 @@
   (validate-graph! target-node)
   (let [compile-walk (fn [node]
                        (-> node
+                           (assoc :factory factory)
                            (with-tensors factory model)
                            (with-tensor-op factory)))
         compiled-target (graph/bottom-up-walk  target-node compile-walk)
-        compiled-nodes (graph/post-order-nodes compiled-target)
-        input->vals (p/for-map [n compiled-nodes :when (= :input(:type n))]
-                               (:ref-name n) (:value n))]
+        compiled-nodes (graph/post-order-nodes compiled-target)]
     (assoc compiled-target
            :compiled? true
-           :model model
-           :input->vals input->vals)))
+           :model model)))
 
 (s/defn forward-pass!
   "forward-pass will topographic walk through graph writing to `:value`
   key on all compiled nodes. You can then look up and retrieve the tensors
   associated with any node"
-  [target :- CompiledRootNode factory :- tensors/PFactory input->vals]
+  [target :- CompiledRootNode input->vals]
   (let [provided-keys (set (keys input->vals))
-        existing-keys (set (keys (:input->vals target)))]
+        nodes (graph/post-order-nodes target)
+        input->node (p/for-map [n nodes :when (= :input(:type n))]
+                               (:ref-name n) n)
+        existing-keys (set (keys input->vals))]
     ;; Ensure provided expected input values
     (when-let [missing (seq (set/difference existing-keys provided-keys))]
       (throw (ex-info "Missing input needed" {:missing missing})))
     ;; Copy input values to node tensors
-    (doseq [[input-name input-node-val] (:input->vals target)
-            :let [provided-vals (get input->vals input-name)]]
-      (tensors/copy-from-input! factory input-node-val provided-vals))
+    (doseq [[name node] input->node
+            :let [factory (p/safe-get node :factory)
+                  value (p/safe-get node :value)
+                  provided-vals (p/safe-get input->vals name)]]
+      (tensors/copy-from-input! factory value provided-vals))
     ;; Bottom up walk to compute forward values
     (graph/bottom-up-walk
      target
