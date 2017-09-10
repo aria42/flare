@@ -49,7 +49,8 @@
      argument defaulting happens below so this is the internal method")
   (canonical-node [this param-name]
     "returns a caonical `ParamNode` for the parameter. If parameters
-     have been initialized, also returns `:value` and `:grad` tensor fields"))
+     have been initialized, also r
+eturns `:value` and `:grad` tensor fields"))
 
 (defn add-params!
   [model shape & {:keys [name, init]}]

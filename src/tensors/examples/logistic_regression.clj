@@ -40,6 +40,6 @@
         loss (compute/compile-graph loss factory m)
         data (generate-data 100 3 10)
         batch-gen #(partition 10 data)]
-    (train/sgd! m loss batch-gen)
+    (train/sgd! m loss batch-gen {:num-iters 100 :learning-rate 0.1})
     ))
 
