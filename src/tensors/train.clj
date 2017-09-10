@@ -22,7 +22,8 @@
    :learning-rate 0.01})
 
 (defn sgd-iter! [model loss-node data-gen opts]
-  (let [factory (p/safe-get loss-node :factory)]
+  (let [factory (p/safe-get loss-node :factory)
+        total-loss (atom 0.0)]
     (doseq [batch (data-gen)]
       ;; zero out gradients for each parameter 
       (doseq [[_ param-node] model]
@@ -32,18 +33,22 @@
          (fn ^double [] 0.0)))
       ;; run forward-backward on the batch
       ;; gradient accumulates deltas
-      (doseq [input->vals batch]
-        (compute/forward-pass! loss-node input->vals)
-        (let [loss-val (->> loss-node :value (tensors/->clj factory) first)]
-          (printf "loss-val %0.5f" loss-val))
-        (compute/backward-pass! loss-node))
+      (let [batch-loss (atom 0.0)]
+        (doseq [input->vals batch]
+          (compute/forward-pass! loss-node input->vals)
+          (compute/backward-pass! loss-node)
+          (let [loss-val (->> loss-node :value (tensors/->clj factory) first)]
+            (swap! batch-loss + loss-val)))
+        (printf "batch-loss: %.3f" @batch-loss)
+        (swap! total-loss + @batch-loss))
       ;; take gradient step
       (doseq [[_ param-node] model]
         (tensors/grad-step!
          (p/safe-get param-node :factory)
          (p/safe-get param-node :value)
          (p/safe-get opts :learning-rate )
-         (p/safe-get param-node :grad))))))
+         (p/safe-get param-node :grad))))
+    @total-loss))
 
 (s/defn sgd!
   "`data-gen` should be called to yield a lazy sequence over batches. Each batch
@@ -54,6 +59,7 @@
     opts :- TrainOpts]
    (let [opts (merge +default-train-opts+ opts)]
      (dotimes [iter (:num-iters opts)]
-       (train-iter! model target-node data-gen opts))))
+       (let [loss (train-iter! model target-node data-gen opts)]
+         (printf "End of iteration %d: %.3f" iter loss)))))
   ([model target-node data-gen]
    (train! model target-node data-gen {})))
