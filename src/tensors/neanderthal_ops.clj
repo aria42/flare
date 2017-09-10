@@ -132,7 +132,7 @@
       (assoc node ::probs probs)))
   (backward-node-pass! [this node]
     (let [[activations-node label-node] (:children node)
-          probs (::probs node)
+          probs (p/safe-get node ::probs)
           loss-grad-val (-> node :grad (real/entry 0))]
       ;; l = (i == label) log(pi)
       (when-let [g (:grad label-node)]
