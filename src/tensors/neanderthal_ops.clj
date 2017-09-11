@@ -9,6 +9,8 @@
             [schema.core :as s]
             [plumbing.core :as p]))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 
 (defn ^:private valid-shape? [shape]
   (<= (count shape) 2))
@@ -163,11 +165,26 @@
     (if (vctr? tensor)
       (seq tensor)
       (doall (map seq (rows tensor)))))
-  (fill! [this tensor set-val-fn]
-    (alter! tensor
-            (if (vctr? tensor)
-              (fn ^double [^long i ^double x] (^clojure.lang.IFn$D set-val-fn))
-              (fn ^double [^long i ^long j ^double x] (^clojure.lang.IFn$D set-val-fn)))))
+  (fill! [this tensor get-val-fn]
+    (let [constant? (number? get-val-fn)
+          fixed-return (double (if constant? get-val-fn 0.0))
+          dims (long-array (if (vctr? tensor) 1 2))
+          get-val-fn ^clojure.lang.IFn$ODD get-val-fn]
+      (alter! tensor
+              (case [constant? (vctr? tensor)]
+                [true true]
+                (fn fill!-tt ^double [^long i ^double x] fixed-return)
+                [false true]
+                (fn fill!-ft ^double [^long i ^double x]
+                  (aset dims (int 0) i)
+                  (.invokePrim get-val-fn dims x))
+                [true false]
+                (fn fill!-tf ^double [^long i ^long j ^double x] fixed-return)
+                [false false]
+                (fn fill!-ff ^double [^long i ^long j ^double x]
+                  (aset dims (int 0) i)
+                  (aset dims (int 1) j)
+                  (.invokePrim get-val-fn dims x))))))
   (from-nums [this nums]
     (let [shape (tensors/guess-shape nums)]
       (case (count shape)
@@ -180,7 +197,9 @@
   (grad-step! [this weights alpha grad]
     (axpy! (- (double alpha)) grad weights))
   (copy-from-input! [this tensor! nums]
-    (copy! (tensors/from-nums this nums) tensor!))
+    (if (or (matrix? nums) (vctr? nums))
+      (copy! nums tensor!)
+      (copy! (tensors/from-nums this nums) tensor!)))
   (zeros [this shape]
     (case (count shape)
       1 (dv (seq (double-array (first shape))))

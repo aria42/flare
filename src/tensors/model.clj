@@ -11,7 +11,7 @@
   {:distribution s/Keyword
    s/Any s/Any})
 
-(defmulti ^clojure.lang.IFn$D get-param-rng :distribution)
+(defmulti ^clojure.lang.IFn$ODD get-param-rng :distribution)
 
 (s/defschema ParamsNode
   "Params graph node schema"
@@ -24,7 +24,7 @@
   (let [lower (double (or lower -1.0))
         upper (double (or upper 1.0))
         r (java.util.Random. (long (or rand-seed 0)))]
-    (fn ^double []
+    (fn ^double [^longs indices ^double x]
       (+ lower (* (- upper lower) (.nextDouble r))))))
 
 (defmethod get-param-rng :normal
@@ -32,16 +32,8 @@
   (let [mean (double (or mean 0.0))
         sigma (double (or sigma 1.0))
         r (java.util.Random. (long (or rand-seed 0)))]
-    (fn ^double []
+    (fn ^double [^longs indices ^double x]
       (/ (+ (.nextGaussian r) mean) sigma))))
-
-(s/defn init-params
-  [shape :- tensors/Shape
-   get-param :- clojure.lang.IFn$D]
-  (for [_ (range (first shape))]
-    (if (= 1 (count shape))
-      (get-param)
-      (init-params (drop 1 shape) get-param))))
 
 (defprotocol PModel
   (-add-params! [this param-name shape init-spec]
@@ -49,8 +41,7 @@
      argument defaulting happens below so this is the internal method")
   (canonical-node [this param-name]
     "returns a caonical `ParamNode` for the parameter. If parameters
-     have been initialized, also r
-eturns `:value` and `:grad` tensor fields"))
+     have been initialized, also returns `:value` and `:grad` tensor fields"))
 
 (defn add-params!
   [model shape & {:keys [name, init]}]

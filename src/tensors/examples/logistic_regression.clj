@@ -1,4 +1,5 @@
 (ns tensors.examples.logistic-regression
+  (:gen-class)
   (:require [tensors.neanderthal-ops :as no]
             [tensors.compute :as compute]
             [tensors.core :as tensors]
@@ -23,11 +24,9 @@
             label (imax activations)]
         {"f" rand-feats "label" [label]}))))
 
-(defn batch-generator [])
-
 (defn train []
-  (let [num-classes 5
-        num-feats 10
+  (let [num-classes 10
+        num-feats 100
         factory (no/->Factory)
         m (model/simple-param-collection factory)
         W (model/add-params! m [num-classes num-feats] :name "W")
@@ -38,8 +37,15 @@
         label (cg/input "label" [1])
         loss (go/cross-entropy-loss activations label)
         loss (compute/compile-graph loss factory m)
-        data (generate-data 100 3 10)
-        batch-gen #(partition 10 data)]
-    (train/sgd! m loss batch-gen {:num-iters 100 :learning-rate 0.1})
+        data (doall (generate-data 1000 num-classes num-feats))
+        batch-gen #(partition 1 data)]
+    (train/sgd! m loss batch-gen {:num-iters 100 :learning-rate 0.01})
     ))
 
+(defn -main []
+  (dotimes [i 10]
+    (let [start (System/currentTimeMillis)]
+      (println "Training " i)
+      (train)
+      (let [time (- (System/currentTimeMillis) start)]
+        (println "Took " time " msecs")))))
