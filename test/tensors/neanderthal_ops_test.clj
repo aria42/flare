@@ -110,7 +110,8 @@
                 :grad (dv [1.0])}
           node (assoc loss :children [scores label])]
       (compute/ensure-valid?! op [scores label])
-      (let [forward-node (compute/forward-node-pass! op node)]
+      (let [node (compute/prep op node)
+            forward-node (compute/forward-node-pass! op node)]
         (is (<
              (l2-dist
               (:tensors.neanderthal-ops/probs forward-node)

@@ -21,6 +21,8 @@
   (ensure-valid?! [this input-nodes]
     "Ensure the operation can be perfed with the tensor operation. Some
     imp0lemntations may support limited dimension or sizes")
+  (prep [this node]
+    "add any tensor fields useful to share between forward/backwward calls")
   (forward-node-pass! [this node]
     "compute the forward pass of the algorithm, for each node, compute
      `:value` tensor for passed in node, using the `:children` nodes
@@ -69,7 +71,9 @@
 
 (defn with-tensor-op [node factory]
   (if (= (:type node) :op)
-    (assoc node :tensor-op (ensure-tensor-op factory node (:children node)))
+    (let [tensor-op (ensure-tensor-op factory node (:children node))]
+      (assoc (prep tensor-op node)
+             :tensor-op tensor-op))
     node))
 
 (defn validate-graph! [node]
@@ -106,11 +110,11 @@
            :compiled? true
            :model model)))
 
-(s/defn forward-pass!
+(defn forward-pass!
   "forward-pass will topographic walk through graph writing to `:value`
   key on all compiled nodes. You can then look up and retrieve the tensors
   associated with any node"
-  [target :- CompiledRootNode input->vals]
+  [target input->vals]
   (let [provided-keys (set (keys input->vals))
         nodes (graph/post-order-nodes target)
         input->node (p/for-map [n nodes :when (= :input(:type n))]
@@ -128,7 +132,7 @@
     ;; Bottom up walk to compute forward values
     (graph/bottom-up-walk
      target
-     (fn [node]
+     (fn walk-fn [node]
        (if-not (seq (:children node))
          ;; leaf node has no computation
          node

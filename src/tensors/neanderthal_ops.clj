@@ -31,6 +31,8 @@
       (doseq [input (rest inputs)]
         (np/axpy! 1.0 input output)))
     node)
+  (prep [this node]
+    node)
   (backward-node-pass! [this node]
     ;; x = x1 + ... + xn
     ;; dxi/dt = dx/dt * 1
@@ -47,6 +49,8 @@
     (doseq [n input-nodes] (ensure-valid-shape?! (:shape n)))
     (when-not (= 2 (count input-nodes))
       (throw (ex-info "Must have two arguments to MultTensorOp"))))
+  (prep [this node]
+    node)
   (forward-node-pass! [this node]
     (let [out (p/safe-get node :value)
           [a b] (mapv #(p/safe-get % :value) (:children node))]
@@ -75,6 +79,8 @@
     (when-not (= 2 (count (:shape (first input-nodes))))
       (throw (ex-info "Need matrix shape"
                       {:shape (:shape (first input-nodes))}))))
+  (prep [this node]
+    node)
   (forward-node-pass! [this node]
     (let [output (:value node)
           input (-> node :children first :value)]
@@ -93,6 +99,8 @@
     (let [shape (:shape (first input-nodes))]
       (when-not (tensors/vector-shape? shape)
         (throw (ex-info "Need vector shape" {:shape shape})))))
+  (prep [this node]
+    node)
   (forward-node-pass! [this node]
     (let [output (:value node)
           input (-> node :children first :value)]
@@ -105,33 +113,35 @@
         (axpy! out-grad (view-ge in-grad))))
     node))
 
-(defn soft-max [scores]
-  (let [probs (copy scores)]
-    ;; exp in place
-    (alter! probs (fn ^double [^double x] (Math/exp x)))
-    ;; normalize
-    (let [Z (double (asum probs))]
-      (scal! (/ 1.0 Z) probs)
-      probs)))
+(defn soft-max! [scores probs!]
+  (copy! scores probs!)
+  ;; exp in place
+  (alter! probs! (fn ^double [^double x] (Math/exp x)))
+  ;; normalize
+  (let [Z (double (asum probs!))]
+    (scal! (/ 1.0 Z) probs!)
+    probs!))
 
 (defrecord CrossEntropyLossTensorOp []
   compute/TensorOp
   (ensure-valid?! [this [activations label]]
     true)
+  (prep [this node]
+    (let [[activations-node label-node] (:children node)
+          len (-> activations-node :shape first)]
+      (assoc node ::probs (dv len))))
   (forward-node-pass! [this node]
     (let [[activations-node label-node] (:children node)
           activations (-> activations-node :value)
-          probs (soft-max activations)
+          probs (soft-max! activations (p/safe-get node ::probs))
           label (-> label-node :value (entry 0) long)
           correct-prob (real/entry probs label)]
       (when (>= label (dim probs))
         (throw (ex-info "Label index out-of-bounds"
                         {:label label
                          :dim (dim activations)})))
-      (alter! (:value node) 0
-              (fn ^double [^double _]
-                (- (Math/log correct-prob))))
-      (assoc node ::probs probs)))
+      (real/entry! (:value node) 0 (- (Math/log correct-prob)))
+      node))
   (backward-node-pass! [this node]
     (let [[activations-node label-node] (:children node)
           probs (p/safe-get node ::probs)
@@ -199,7 +209,11 @@
   (copy-from-input! [this tensor! nums]
     (if (or (matrix? nums) (vctr? nums))
       (copy! nums tensor!)
-      (copy! (tensors/from-nums this nums) tensor!)))
+      (if (vctr? tensor!)
+        (alter! tensor! (fn ^double [^long idx ^double x]
+                          (double (nth nums idx))))
+        (alter! tensor! (fn ^double [^long i ^long j ^double _]
+                         (double (get-in nums [i j])))))))
   (zeros [this shape]
     (case (count shape)
       1 (dv (seq (double-array (first shape))))

@@ -38,7 +38,7 @@
         loss (go/cross-entropy-loss activations label)
         loss (compute/compile-graph loss factory m)
         data (doall (generate-data 1000 num-classes num-feats))
-        batch-gen #(partition 1 data)]
+        batch-gen #(partition 32 data)]
     (train/sgd! m loss batch-gen {:num-iters 100 :learning-rate 0.01})
     ))
 
