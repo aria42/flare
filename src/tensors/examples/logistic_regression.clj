@@ -25,8 +25,8 @@
         {"f" rand-feats "label" [label]}))))
 
 (defn train []
-  (let [num-classes 10
-        num-feats 100
+  (let [num-classes 5
+        num-feats 1000
         factory (no/->Factory)
         m (model/simple-param-collection factory)
         W (model/add-params! m [num-classes num-feats] :name "W")

@@ -45,14 +45,25 @@
    (p/safe-get loss-node :grad)
    1.0 #_(fn ^double [^shorts _ ^double _] 1.0)))
 
-(defn update-params! [model opts]
+(defn ^:static clip [^double x ^double min ^double max]
+  (if (> x max)
+    max
+    (if (< x min)
+      min
+      x)))
+
+(defn update-params! [model batch opts]
   ;; take gradient step
   (doseq [[_ param-node] model]
-    (when-let [grad-clip (:grad-clip opts)]
-      (tensors/grad-clip!
+    (let [grad-clip (double (:grad-clip opts 100.00))
+          normalizer (/ 1.0 (double (count batch)))
+          clip-min (- (Math/abs grad-clip))
+          clip-max (Math/abs grad-clip)]
+      (tensors/fill!
        (p/safe-get param-node :factory)
        (p/safe-get param-node :grad)
-       grad-clip))
+       (fn ^double [^longs indices ^double x]
+         (clip (* normalizer x) clip-min clip-max))))
     (tensors/grad-step!
      (p/safe-get param-node :factory)
      (p/safe-get param-node :value)
@@ -67,7 +78,7 @@
               loss-val (->> loss-node :value (tensors/->clj factory) first)]
           ;; side-effect to update gradients
           (compute/backward-pass! loss-node)
-          (recur (+ batch-loss 0.0 (double loss-val)) (next batch)))
+          (recur (+ batch-loss 0.0 (double loss-val)) (rest batch)))
         batch-loss))))
 
 (defn sgd-iter! [model loss-node data-gen opts]
@@ -77,7 +88,7 @@
       (reset-batch! loss-node zeros-cached*)
       (let [batch-loss (run-batch! model loss-node batch)]
         (swap! total-loss + batch-loss))
-      (update-params! model opts))
+      (update-params! model batch opts))
     (let [grads (mapcat (fn [[_ x]] (flatten (tensors/->clj (:factory x) (:grad x)))) model)
           l2-norm (Math/sqrt (reduce (fn [res x] (+ res (* x x))) grads))
           max-l1-norm (apply max (map (fn [x] (Math/abs (double x))) grads))]

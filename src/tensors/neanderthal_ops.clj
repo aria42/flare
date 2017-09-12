@@ -114,9 +114,10 @@
     node))
 
 (defn soft-max! [scores probs!]
-  (copy! scores probs!)
-  ;; exp in place
-  (alter! probs! (fn ^double [^double x] (Math/exp x)))
+  ;; copy scores + exp in place
+  (alter! probs!
+          (fn ^double [^long idx ^double x] 
+            (Math/exp (real/entry scores idx))))
   ;; normalize
   (let [Z (double (asum probs!))]
     (scal! (/ 1.0 Z) probs!)
@@ -209,11 +210,7 @@
   (copy-from-input! [this tensor! nums]
     (if (or (matrix? nums) (vctr? nums))
       (copy! nums tensor!)
-      (if (vctr? tensor!)
-        (alter! tensor! (fn ^double [^long idx ^double x]
-                          (double (nth nums idx))))
-        (alter! tensor! (fn ^double [^long i ^long j ^double _]
-                         (double (get-in nums [i j])))))))
+      (copy! (tensors/from-nums this nums) tensor!)))
   (zeros [this shape]
     (case (count shape)
       1 (dv (seq (double-array (first shape))))
