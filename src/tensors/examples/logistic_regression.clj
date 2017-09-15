@@ -1,6 +1,7 @@
 (ns tensors.examples.logistic-regression
   (:gen-class)
   (:require [tensors.neanderthal-ops :as no]
+            [tensors.nd4j-ops :as nd4j-ops]
             [tensors.compute :as compute]
             [tensors.core :as tensors]
             [tensors.model :as model]
@@ -8,7 +9,8 @@
             [tensors.train :as train]
             [tensors.computation-graph :as cg]
             [uncomplicate.neanderthal.native :refer :all]
-            [uncomplicate.neanderthal.core :refer :all]))
+            [uncomplicate.neanderthal.core :refer :all]
+            [clojure.tools.cli :refer [parse-opts]]))
 
 (defn generate-data [num-datums num-classes num-feats]
   (let [r (java.util.Random. 0)
@@ -24,10 +26,12 @@
             label (imax activations)]
         {"f" rand-feats "label" [label]}))))
 
-(defn train []
+(defn train [engine]
   (let [num-classes 5
         num-feats 1000
-        factory (no/->Factory)
+        factory (case engine
+                  :nd4j (nd4j-ops/->Factory)
+                  :neanderthal (no/->Factory))
         m (model/simple-param-collection factory)
         W (model/add-params! m [num-classes num-feats] :name "W")
         b (model/add-params! m [num-classes] :name "b")
@@ -42,10 +46,21 @@
     (train/sgd! m loss batch-gen {:num-iters 100 :learning-rate 0.01})
     ))
 
-(defn -main []
-  (dotimes [i 10]
-    (let [start (System/currentTimeMillis)]
-      (println "Training " i)
-      (train)
-      (let [time (- (System/currentTimeMillis) start)]
-        (println "Took " time " msecs")))))
+(def cli-options
+  ;; An option with a required argument
+  [["-e" "--engine ENGINE" "Engine {nd4j, neanderthal"
+    :default :nd4j
+    :parse-fn keyword
+    :validate [#{:nd4j, :neanderthal} "Must be {nd4j, neanderthal}"]]
+   ["-h" "--help"]])
+
+(defn -main [& args]
+  (let [parse (parse-opts args cli-options)
+        {:keys [engine] (:options parse)}]
+    (dotimes [i 10]
+      (let [start (System/currentTimeMillis)]
+        (println "Training " i " on engine " engine)
+        (train engine)
+        (let [time (- (System/currentTimeMillis) start)]
+          (println "Took " time " msecs")
+          (.flush System/out))))))

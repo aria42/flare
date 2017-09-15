@@ -1,5 +1,7 @@
 (ns tensors.nd4j-ops
   (:import [org.nd4j.linalg.factory Nd4j]
+           [org.nd4j.linalg.api.iter NdIndexIterator]
+           [org.nd4j.linalg.ops.transforms Transforms]
            [org.nd4j.linalg.api.ndarray INDArray])
   (:require [tensors.graph :as graph]
             [tensors.core :as tensors]
@@ -17,9 +19,9 @@
   compute/TensorOp
   (ensure-valid?! [this input-nodes] true)
   (forward-node-pass! [this node]
-    (let [^INDArray output (:value node)
+    (let [^INDArray output (p/safe-get node :value)
           inputs (mapv :value (:children node))]
-      (.add output ^INDArray (first inputs))
+      (.assign output ^INDArray (first inputs))
       (doseq [^INDArray other (rest inputs)]
         (.addi output other)))
     node)
@@ -35,12 +37,128 @@
         (.assign ^INDArray input-grad df_dt)))
     node))
 
+(defrecord MultTensorOp []
+  compute/TensorOp
+  (ensure-valid?! [this input-nodes] true)
+  (prep [this node] node)
+  (forward-node-pass! [this node]
+    (let [^INDArray out (p/safe-get node :value)
+          [a b] (mapv #(p/safe-get % :value) (:children node))]
+      (.assign out (.mmul ^INDArray a ^INDArray b)))
+    node)
+  (backward-node-pass! [this node]
+    ;; Z[m,n] = X[m,k] Y[k,n]
+    ;; dX/dt[m,k] = dZ/dt[m,n] Y^T [n, k]
+    (let [^INDArray dZ (p/safe-get node :grad)
+          cs (:children node)
+          [^INDArray X ^INDArray Y] (mapv #(p/safe-get % :value) cs)
+          [^INDArray dX ^INDArray dY] (mapv #(p/safe-get % :grad) cs)]
+      ;; update dX
+      (when dX
+        (let [update (.mmul dZ (.transpose Y))]
+          (.addi dX update)))
+      ;; update dY
+      (when dY
+        (let [update (.mmul (.transpose X) dZ)]
+          (.addi dY update))))
+    node))
+
+(defrecord SqueezeTensorOp []
+  compute/TensorOp
+  (ensure-valid?! [this input-nodes] true)
+  (prep [this node] node)
+  (forward-node-pass! [this node]
+    (let [^INDArray output (:value node)
+          ^INDArray input (-> node :children first :value)]
+      (.assign output input))
+    node)
+  (backward-node-pass! [this node]
+    (let [^INDArray out-grad (:grad node)
+          ^INDArray in-grad (-> node :children first :grad)]
+      (when in-grad
+        (.assign in-grad out-grad)))
+    node))
+
+(defrecord StrechTensorOp []
+  compute/TensorOp
+  (ensure-valid?! [this input-nodes] true)
+  (prep [this node] node)
+  (forward-node-pass! [this node]
+    (let [^INDArray output (:value node)
+          ^INDArray  input (-> node :children first :value)]
+      (.assign output input))
+    node)
+  (backward-node-pass! [this node]
+    (let [^INDArray out-grad (:grad node)
+          ^INDArray in-grad (-> node :children first :grad)]
+      (when in-grad
+        (.assign in-grad out-grad)))
+    node))
+
+(s/defn soft-max! :- INDArray
+  [scores :- INDArray probs! :- INDArray]
+  ;; copy scores + exp in place
+  (.assign probs! scores)
+  (Transforms/exp probs! false)
+  ;; normalize
+  (let [Z (.sumNumber probs!)]
+    (.muli probs! (Double. (/ 1.0 (.doubleValue Z))))
+    probs!))
+
+(defrecord CrossEntropyLossTensorOp []
+    compute/TensorOp
+    (ensure-valid?! [this [activations label]]
+      true)
+    (prep [this node]
+      (let [[activations-node label-node] (:children node)
+            len (-> activations-node :shape first int)]
+        (assoc node ::probs (Nd4j/zeros len))))
+    (forward-node-pass! [this node]
+      (let [[activations-node label-node] (:children node)
+            ^INDArray activations (p/safe-get activations-node :value)
+            probs (soft-max! activations (p/safe-get node ::probs))
+            ^INDArray label (p/safe-get label-node :value)
+            label-value (long (.getDouble label 0))
+            correct-prob (.getDouble probs label-value)]
+        (when (>= label-value (.length probs))
+          (throw (ex-info "Label index out-of-bounds"
+                          {:label label
+                           :dim (.size activations 0)})))
+        (.putScalar
+         ^INDArray (p/safe-get node :value)
+         (int 0)
+         (- (Math/log correct-prob)))
+        node))
+    (backward-node-pass! [this node]
+      (let [[activations-node label-node] (:children node)
+            ^INDArray probs (p/safe-get node ::probs)
+            ^INDArray loss-grad (p/safe-get node :grad)
+            loss-grad-val (.getDouble loss-grad 0)]
+        ;; l = (i == label) log(pi)
+        (when-let [g (:grad label-node)]
+          (throw (ex-info "Don't support label differentiation")))
+        ;; d pi / dt = dl/dt (1.0/pi)
+        (let [^INDArray label (p/safe-get label-node :value)
+              gold-idx (int (.getDouble label 0))
+              ^INDArray activations (p/safe-get activations-node :value)]
+          (when-let [^INDArray act-grad (p/safe-get activations-node :grad)]
+            (let [n (.length act-grad)]
+              (dotimes [idx n]
+                (.putScalar
+                 act-grad
+                 (int idx)
+                 (* loss-grad-val
+                    (- (.getDouble probs idx)
+                       (if (= idx gold-idx) 1.0 0.0)))))))))
+      node))
+
+
 (def ^:private +tensor-ops+
   {:+ ->SumTensorOp
-   :* nil
-   :squeeze nil
-   :strech nil
-   :cross-entropy-loss nil})
+   :* ->MultTensorOp
+   :squeeze ->SqueezeTensorOp
+   :strech ->StrechTensorOp
+   :cross-entropy-loss ->CrossEntropyLossTensorOp})
 
 (defrecord Factory []
   tensors/PFactory
@@ -48,136 +166,31 @@
     ((get +tensor-ops+ op-key)))
   (->clj [this tensor]
     ;; horrible horrible hack
-    (read-string (.replace (.toString tensor) "\n" "")))
+    (let [val (read-string (.replace (.toString tensor) "\n" ""))]
+      (if (number? val)
+        [val]
+        val)))
   (fill! [this tensor get-val-fn]
-    )
-    (from-nums [this nums]
-  )
-    (grad-step! [this weights alpha grad]
-  )
-    (copy-from-input! [this tensor! nums]
-  )
-    (zeros [this shape]
-  ))
-
-
-(comment 
-  (defrecord MultTensorOp []
-    compute/TensorOp
-    (ensure-valid?! [this input-nodes]
-      (doseq [n input-nodes] (ensure-valid-shape?! (:shape n)))
-      (when-not (= 2 (count input-nodes))
-        (throw (ex-info "Must have two arguments to MultTensorOp"))))
-    (prep [this node]
-      node)
-    (forward-node-pass! [this node]
-      (let [out (p/safe-get node :value)
-            [a b] (mapv #(p/safe-get % :value) (:children node))]
-        (scal! 0.0 out)
-        (mm! 1.0 a b out))
-      node)
-    (backward-node-pass! [this node]
-      ;; Z[m,n] = X[m,k] Y[k,n]
-      ;; dX/dt[m,k] = dZ/dt[m,n] Y^T [n, k]
-      (let [dZ (p/safe-get node :grad)
-            cs (:children node)
-            [X Y] (mapv #(p/safe-get % :value) cs)
-            [dX dY] (mapv #(p/safe-get % :grad) cs)]
-        ;; update dX
-        (when dX
-          (np/mm! 1.0 dZ (trans Y) dX))
-        ;; update dY
-        (when dY
-          (np/mm! 1.0 (trans X) dZ dY)))
-      node))
-
-
-  (defrecord SqueezeTensorOp []
-    compute/TensorOp
-    (ensure-valid?! [this input-nodes]
-      (when-not (= 2 (count (:shape (first input-nodes))))
-        (throw (ex-info "Need matrix shape"
-                        {:shape (:shape (first input-nodes))}))))
-    (prep [this node]
-      node)
-    (forward-node-pass! [this node]
-      (let [output (:value node)
-            input (-> node :children first :value)]
-        (copy! (view-vctr input) output))
-      node)
-    (backward-node-pass! [this node]
-      (let [out-grad (:grad node)
-            in-grad (-> node :children first :grad)]
-        (when in-grad
-          (copy! out-grad (view-vctr in-grad))))
-      node))
-
-  (defrecord StrechTensorOp []
-    compute/TensorOp
-    (ensure-valid?! [this input-nodes]
-      (let [shape (:shape (first input-nodes))]
-        (when-not (tensors/vector-shape? shape)
-          (throw (ex-info "Need vector shape" {:shape shape})))))
-    (prep [this node]
-      node)
-    (forward-node-pass! [this node]
-      (let [output (:value node)
-            input (-> node :children first :value)]
-        (copy! input (view-vctr output)))
-      node)
-    (backward-node-pass! [this node]
-      (let [out-grad (:grad node)
-            in-grad (-> node :children first :grad)]
-        (when in-grad
-          (axpy! out-grad (view-ge in-grad))))
-      node))
-
-  (defn soft-max! [scores probs!]
-    ;; copy scores + exp in place
-    (alter! probs!
-            (fn ^double [^long idx ^double x] 
-              (Math/exp (real/entry scores idx))))
-    ;; normalize
-    (let [Z (double (asum probs!))]
-      (scal! (/ 1.0 Z) probs!)
-      probs!))
-
-  (defrecord CrossEntropyLossTensorOp []
-    compute/TensorOp
-    (ensure-valid?! [this [activations label]]
-      true)
-    (prep [this node]
-      (let [[activations-node label-node] (:children node)
-            len (-> activations-node :shape first)]
-        (assoc node ::probs (dv len))))
-    (forward-node-pass! [this node]
-      (let [[activations-node label-node] (:children node)
-            activations (-> activations-node :value)
-            probs (soft-max! activations (p/safe-get node ::probs))
-            label (-> label-node :value (entry 0) long)
-            correct-prob (real/entry probs label)]
-        (when (>= label (dim probs))
-          (throw (ex-info "Label index out-of-bounds"
-                          {:label label
-                           :dim (dim activations)})))
-        (real/entry! (:value node) 0 (- (Math/log correct-prob)))
-        node))
-    (backward-node-pass! [this node]
-      (let [[activations-node label-node] (:children node)
-            probs (p/safe-get node ::probs)
-            loss-grad-val (-> node :grad (real/entry 0))]
-        ;; l = (i == label) log(pi)
-        (when-let [g (:grad label-node)]
-          (throw (ex-info "Don't support label differentiation")))
-        ;; d pi / dt = dl/dt (1.0/pi)
-        (let [gold-idx (long (first (:value label-node)))
-              activations (:value activations-node)]
-          (when-let [act-grad (:grad activations-node)]
-            (alter! act-grad
-                    (fn ^double [^long idx ^double _]
-                      (* loss-grad-val
-                         (- (real/entry probs idx)
-                            (if (= idx gold-idx) 1.0 0.0))))))))
-      node))
-
-  )
+    (let [^INDArray tensor tensor]
+      (if (number? get-val-fn)
+        (.assign tensor ^Number get-val-fn)
+        (let [iter (NdIndexIterator. (.ordering tensor) (.shape tensor))]
+          (doseq [^ints idx-path (iterator-seq iter)]
+            (let [old-val (.getDouble tensor idx-path)
+                  val-fn ^clojure.lang.IFn$ODD get-val-fn
+                  new-val (.invokePrim val-fn (long-array idx-path) old-val)]
+              (.putScalar tensor idx-path new-val)))))
+      tensor))
+  (from-nums [this nums]
+    (Nd4j/create (double-array (flatten nums))
+                 (int-array (tensors/guess-shape nums))
+                 \c))
+  (grad-step! [this weights alpha grad]
+    (let [update (.mul ^INDArray grad ^Double alpha)]
+      (.addi ^INDArray grad update)))
+  (copy-from-input! [this tensor! nums]
+    (if (instance? INDArray nums)
+      (.assign ^INDArray tensor! ^INDArray nums)
+      (.assign ^INDArray tensor! ^INDArray (tensors/from-nums this nums))))
+  (zeros [this shape]
+    (Nd4j/zeros (int-array shape))))
