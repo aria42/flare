@@ -11,4 +11,4 @@
                  [prismatic/schema "1.1.6"]
                  [prismatic/plumbing "0.5.4"]
                  [uncomplicate/neanderthal "0.14.0"]
-                 [org.clojure/tools.cli "0.3.6"]])
+                 [org.clojure/tools.cli "0.3.5"]])

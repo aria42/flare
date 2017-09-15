@@ -26,9 +26,9 @@
             label (imax activations)]
         {"f" rand-feats "label" [label]}))))
 
-(defn train [engine]
+(defn train [{:keys [engine, num-examples, num-feats] :as opts}]
+  (println "options " opts)
   (let [num-classes 5
-        num-feats 1000
         factory (case engine
                   :nd4j (nd4j-ops/->Factory)
                   :neanderthal (no/->Factory))
@@ -41,7 +41,7 @@
         label (cg/input "label" [1])
         loss (go/cross-entropy-loss activations label)
         loss (compute/compile-graph loss factory m)
-        data (doall (generate-data 1000 num-classes num-feats))
+        data (doall (generate-data num-examples num-classes num-feats))
         batch-gen #(partition 32 data)]
     (train/sgd! m loss batch-gen {:num-iters 100 :learning-rate 0.01})
     ))
@@ -52,15 +52,20 @@
     :default :nd4j
     :parse-fn keyword
     :validate [#{:nd4j, :neanderthal} "Must be {nd4j, neanderthal}"]]
+   ["-n" "--num-examples NUM" "Number of elements"
+    :default 1000
+    :parse-fn #(Integer/parseInt %)]
+  ["-f" "--num-feats NUM" "Number of feats"
+   :default 100
+    :parse-fn #(Integer/parseInt %)]
    ["-h" "--help"]])
 
 (defn -main [& args]
-  (let [parse (parse-opts args cli-options)
-        {:keys [engine] (:options parse)}]
+  (let [parse (parse-opts args cli-options)]
     (dotimes [i 10]
       (let [start (System/currentTimeMillis)]
-        (println "Training " i " on engine " engine)
-        (train engine)
+        (println "Training " i)
+        (train (:options parse))
         (let [time (- (System/currentTimeMillis) start)]
           (println "Took " time " msecs")
           (.flush System/out))))))
