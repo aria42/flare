@@ -168,6 +168,15 @@
    :strech ->StrechTensorOp
    :cross-entropy-loss ->CrossEntropyLossTensorOp})
 
+(defn -from-nums [nums shape]
+  (case (count shape)
+    1 (dv nums)
+    2 (let [[row col] shape]
+        (dge row col (apply concat nums) {:order :row}))
+    ;; else
+    (let [err (str "Unallowed shape for neanderthal: " (vec shape))]
+      (throw (RuntimeException. err)))))
+
 (defrecord Factory []
   tensors/PFactory
   (get-op [this op-key]
@@ -198,19 +207,16 @@
                   (.invokePrim get-val-fn dims x))))))
   (from-nums [this nums]
     (let [shape (tensors/guess-shape nums)]
-      (case (count shape)
-        1 (dv nums)
-        2 (let [[row col] shape]
-            (dge row col (apply concat nums) {:order :row}))
-        ;; else
-        (let [err (str "Unallowed shape for neanderthal: " (vec shape))]
-          (throw (RuntimeException. err))))))
+      (-from-nums nums shape)))
   (grad-step! [this weights alpha grad]
     (axpy! (- (double alpha)) grad weights))
   (copy-from-input! [this tensor! nums]
     (if (or (matrix? nums) (vctr? nums))
       (copy! nums tensor!)
-      (copy! (tensors/from-nums this nums) tensor!)))
+      (let [shape (if (vctr? tensor!)
+                    [(dim tensor!)]
+                    [(mrows tensor!) (ncols tensor!)])]
+        (copy! (-from-nums nums shape) tensor!))))
   (zeros [this shape]
     (case (count shape)
       1 (dv (seq (double-array (first shape))))

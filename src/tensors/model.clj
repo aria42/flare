@@ -47,8 +47,8 @@
   [model shape & {:keys [name, init]}]
   (let [name (or name (clojure.core/name (gensym "param")))
         init (or init {:distribution :uniform})]
-    #_(s/validate s/Str name)
-    #_(s/validate InitParamSpec init)
+    (s/validate s/Str name)
+    (s/validate InitParamSpec init)
     (-add-params! model name shape init)))
 
 

@@ -48,7 +48,7 @@
 
 (def cli-options
   ;; An option with a required argument
-  [["-e" "--engine ENGINE" "Engine {nd4j, neanderthal"
+  [["-e" "--engine ENGINE" "Engine {nd4j, neanderthal}"
     :default :nd4j
     :parse-fn keyword
     :validate [#{:nd4j, :neanderthal} "Must be {nd4j, neanderthal}"]]
