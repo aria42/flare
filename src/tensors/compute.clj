@@ -26,13 +26,31 @@
   (forward-node-pass! [this node]
     "compute the forward pass of the algorithm, for each node, compute
      `:value` tensor for passed in node, using the `:children` nodes
-      and their `:value` tensors. Returns the node in case any other
-      computations are added to the node for use in the backward pass.")
+     and their `:value` tensors. Returns the node in case any other
+     computations are added to the node for use in the backward pass.")
   (backward-node-pass! [this node]
     "compute the `:grad` gradient tensor on each child of passed in node reaching
      down to the leaves  (which include the parameter nodes).
      Returns the node so that downstream backward-node-pass!
      calls can use added data."))
+
+(defprotocol BatchTensorOp
+  (batch-signature [this node]
+    "signature that can be used to group operations")
+  (batch-forward-node-pass! [this sig nodes]
+    "compute the batch version of the forward pass")
+  (batch-backward-node-pass! [this sig nodes]
+    "compute the batch version of the backward pass"))
+
+(defn -trivial-batch-forward-pass! [tensor-op nodes]
+  (mapv
+   (fn [n] (forward-node-pass! tensor-op n))
+   nodes))
+
+(defn -trivial-batch-backward-pass! [tensor-op nodes]
+  (mapv
+   (fn [n] (backward-node-pass! tensor-op n))
+   nodes))
 
 (s/defschema CompiledOpNode
   "Compiled operation has a tensor operation associated with

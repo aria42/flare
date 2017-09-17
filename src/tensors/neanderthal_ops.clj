@@ -70,7 +70,49 @@
       ;; update dY
       (when dY
         (np/mm! 1.0 (trans X) dZ dY)))
-    node))
+    node)
+  compute/BatchTensorOp
+  (batch-signature [this node]
+    ;; only batch when right-hand side is a (row) vector
+    ;; and the left-hand-side is the same value
+    ;; so we can do a Matrix * Matrix operation
+    ;; instead of a Matrix * Vector
+    (let [[a b] (p/safe-get node :children)
+          [nrows ncols] (:shape b)]
+      ;; b is either vector or (row) vector
+      (when (or (nil? ncols) (= ncols 1))
+        [::mult (p/safe-get a :ref-name) (:shape b)])))
+  (batch-forward-node-pass! [this sig nodes]
+    (let [[_ m-ref v-shape] sig
+          M (-> nodes first :children first)
+          num-rows (first v-shape)
+          num-cols (count nodes)
+          cached (:batched-cache (first nodes))
+          new-input (if cached
+                      (first cached)
+                      (dge num-rows num-cols))]
+      (when-not (= m-ref (:ref-name M))
+        (throw (ex-info "Bad M ref" {:m-ref m-ref :M M})))
+      ;; copy columns to new matrix
+      (loop [j 0 nodes nodes]
+        (when-let [node (first nodes)]
+          (let [b (-> node :children second)]
+            (transfer! (p/safe-get b :value)
+                       (submatrix new-input 0 j num-rows 1))
+            (recur (inc j) (next nodes)))))
+      ;; perfrom mm, copy columns to outputs
+      (let [result (if cached (second cached) (dge (-> M :shape first) (count nodes)))]
+        (scal! 0.0 result)
+        (mm! 1.0 (p/safe-get M :value) new-input 1.0 result)
+        (loop [nodes nodes cols (cols result)]
+          (when-let [n (first nodes)]
+            (transfer! (first cols) (p/safe-get n :value))
+            (recur (next nodes) (next cols))))
+        (if cached
+          nodes
+          (concat
+           [(assoc (first nodes) :batched-cache [new-input result])]
+           (rest nodes)))))))
 
 
 (defrecord SqueezeTensorOp []
