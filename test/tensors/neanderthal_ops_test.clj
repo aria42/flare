@@ -51,7 +51,29 @@
       (let [backward-node (compute/backward-node-pass! op node)]
         (is (= backward-node node))
         (is (= (:grad B) (dge 1 2 [3 3])))
-        (is (= (:grad A) (dge 2 1 [7 7])))))))
+        (is (= (:grad A) (dge 2 1 [7 7]))))))
+  (testing "c = A b (matrix * vector)"
+    (let [op (->MultTensorOp)
+          A {:shape [2 3]
+             :value (dge 2 3 [1 2 3 4 5 6])
+             :grad (dge 2 3)}
+          b {:shape [3]
+             :value (dv [1 1 1])
+             :grad (dv 3)}
+          c {:shape [2]
+             :value (dv 2)
+             :grad (dv 2)}
+          node (assoc c :children [A, b])]
+      (compute/ensure-valid?! op [A b])
+      (let [forward-node (compute/forward-node-pass! op node)]
+        (is (= forward-node node))
+        (is (= (:value c) (dv [9 12]))))
+      ;; populate gradient of output
+      (copy! (dv [1 1]) (:grad c))
+      (let [backward-node (compute/backward-node-pass! op node)]
+        (is (= backward-node node))
+        (is (= (:grad b) (dv [3 7 11])))
+        (is (= (:grad A) (dge 2 3 [1 1 1 1 1 1])))))))
 
 (deftest squeeze-op
   (testing "B = (squeeze A 1)"

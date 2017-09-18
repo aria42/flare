@@ -53,9 +53,11 @@
     node)
   (forward-node-pass! [this node]
     (let [out (p/safe-get node :value)
-          [a b] (mapv #(p/safe-get % :value) (:children node))]
-      (scal! 0.0 out)
-      (mm! 1.0 a b out))
+          [a b] (map #(p/safe-get % :value) (:children node))]
+      ;; mm!/mv! will add, so need to clear first
+      (if (vctr? b)
+        (mv! 1.0 a b 0.0 out)
+        (mm! 1.0 a b 0.0 out)))
     node)
   (backward-node-pass! [this node]
     ;; Z[m,n] = X[m,k] Y[k,n]
@@ -66,10 +68,14 @@
           [dX dY] (mapv #(p/safe-get % :grad) cs)]
       ;; update dX
       (when dX
-        (np/mm! 1.0 dZ (trans Y) dX))
+        (if (matrix? Y)
+          (np/mm! 1.0 dZ (trans Y) 1.0 dX)
+          (np/mm! 1.0 (view-ge dZ) (trans (view-ge Y)) 1.0 dX)))
       ;; update dY
       (when dY
-        (np/mm! 1.0 (trans X) dZ dY)))
+        (if (matrix? Y)
+          (np/mm! 1.0 (trans X) dZ dY)
+          (np/mv! 1.0 (trans X) dZ dY))))
     node)
   compute/BatchTensorOp
   (batch-signature [this node]
