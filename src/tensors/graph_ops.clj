@@ -31,15 +31,18 @@
       (throw (ex-info "Need at least one input"
                       {:num-args (count input-nodes)})))
     (let [shapes (map :shape input-nodes)]
+      (when-let [bad (some (fn [s] (> (count s) 2)) shapes)]
+        (throw (ex-info "Only max 2d allowed" {:bad bad})))
       (when-not (every?
-                 (fn [[[a b] [c d]]]
-                   (= b c))
+                 (fn [[[a b] [c d]]] (= b c))
                  (partition 2 shapes))
-        (throw (RuntimeException.
-                (format "Can't multiply shapes: %s" shapes))))))
+        (throw (ex-info "Incompatibl shapes" {:shapes shapes})))))
   (forward-shape [this input-nodes]
-    (let [shapes (map :shape input-nodes)]
-      [(ffirst shapes) (second (last shapes))]))
+    (let [shapes (map :shape input-nodes)
+          num-rows (ffirst shapes)]
+      (if-let [num-cols (second (last shapes))]
+        [num-rows num-cols]
+        [num-rows])))
   (op-descriptor [this] "*"))
 
 (s/defn ensure-vector-tensor?! [prefix shape :- tensors/Shape]
