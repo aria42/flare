@@ -26,9 +26,9 @@
 
 (defn reset-batch!
   "Reset all gradients except the target node"
-  [loss-node cached-zeros*]
+  [all-nodes loss-node cached-zeros*]
   ;; zero out gradients
-  (doseq [node (graph/post-order-nodes loss-node)
+  (doseq [node all-nodes
           :let [grad (:grad node)
                 factory (p/safe-get node :factory)]
           :when grad]
@@ -40,17 +40,17 @@
    (p/safe-get loss-node :grad)
    1.0))
 
-(defn reset-graph! [node]
+(defn reset-graph! [top-node nodes]
   ;; clear out non-parameter gradients
-  (doseq [node (graph/post-order-nodes node)
+  (doseq [node nodes
           :let [grad (:grad node)]
           :when (and grad (not= :params (:type node)))]
     (tensors/fill! (p/safe-get node :factory) grad 0.0))
   ;; put a 1.0 on top-level gradient so backward pass
   ;; can propogate non-zero grads backwards
   (tensors/fill!
-   (p/safe-get node :factory)
-   (p/safe-get node :grad)
+   (p/safe-get top-node :factory)
+   (p/safe-get top-node :grad)
    1.0))
 
 (defn ^:static clip ^double [^double x ^double min ^double max]
@@ -78,10 +78,10 @@
      (p/safe-get opts :learning-rate)
      (p/safe-get param-node :grad))))
 
-(defn run-batch! [model loss-node batch]
+(defn run-batch! [model all-nodes loss-node batch]
   (let [factory (p/safe-get loss-node :factory)]
     (loop [batch-loss 0.0 batch batch]
-      (reset-graph! loss-node)
+      (reset-graph! loss-node all-nodes)
       (if-let [input->vals (first batch)]
         (let [loss-node (compute/forward-pass! loss-node input->vals)
               loss-val (->> loss-node :value (tensors/->clj factory) first)]
@@ -92,10 +92,11 @@
 
 (defn sgd-iter! [model loss-node data-gen opts]
   (let [total-loss (atom 0.0)
-        zeros-cached* (atom {})]
+        zeros-cached* (atom {})
+        all-nodes (graph/post-order-nodes loss-node)]
     (doseq [batch (data-gen)]
-      (reset-batch! loss-node zeros-cached*)
-      (let [batch-loss (run-batch! model loss-node batch)]
+      (reset-batch! all-nodes loss-node zeros-cached*)
+      (let [batch-loss (run-batch! model all-nodes loss-node batch)]
         (swap! total-loss + batch-loss))
       (update-params! model batch opts))
     (let [grads (mapcat (fn [[_ x]] (flatten (tensors/->clj (:factory x) (:grad x)))) model)
