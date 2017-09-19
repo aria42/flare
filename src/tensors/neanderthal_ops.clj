@@ -223,8 +223,7 @@
     2 (let [[row col] shape]
         (dge row col (apply concat nums) {:order :row}))
     ;; else
-    (let [err (str "Unallowed shape for neanderthal: " (vec shape))]
-      (throw (RuntimeException. err)))))
+    (throw (ex-info "Unallowed shape" {:shape (vec shape)}))))
 
 (defrecord Factory []
   tensors/PFactory
@@ -260,12 +259,19 @@
   (grad-step! [this weights alpha grad]
     (axpy! (- (double alpha)) grad weights))
   (copy-from-input! [this tensor! nums]
-    (if (or (matrix? nums) (vctr? nums))
-      (copy! nums tensor!)
-      (let [shape (if (vctr? tensor!)
-                    [(dim tensor!)]
-                    [(mrows tensor!) (ncols tensor!)])]
-        (copy! (-from-nums nums shape) tensor!))))
+    (cond
+      ;; fast if the nums is already neanderthal
+      (or (matrix? nums) (vctr? nums)) (copy! nums tensor!)
+      ;; faster to use nth and directly alter
+      (vctr? tensor!) (let [nums (if (vector? nums) (vec nums) nums)]
+                        (alter! tensor!
+                                (fn ^double [^long idx ^double _]
+                                  (nth nums idx))))
+      ;; give up on performance....
+      :else (let [shape (if (vctr? tensor!)
+                          [(dim tensor!)]
+                          [(mrows tensor!) (ncols tensor!)])]
+              (copy! (-from-nums nums shape) tensor!))))
   (zeros [this shape]
     (case (count shape)
       1 (dv (seq (double-array (first shape))))
