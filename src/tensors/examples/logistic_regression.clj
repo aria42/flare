@@ -26,25 +26,26 @@
             label (imax activations)]
         {"f" rand-feats "label" [label]}))))
 
-(defn train [{:keys [engine, num-examples, num-feats] :as opts}]
+(defn lr-loss [m num-classes num-feats]
+  (let [W (model/add-params! m [num-classes num-feats] :name "W")
+        b (model/add-params! m [num-classes] :name "b")
+        feat-vec (cg/input "f" [num-feats])
+        activations (go/+ (go/* W feat-vec) b)
+        label (cg/input "label" [1])]
+    (go/cross-entropy-loss activations label)))
+
+(defn train [{:keys [engine, num-examples, num-iters, num-feats, num-batch] :as opts}]
   (println "options " opts)
   (let [num-classes 5
         factory (case engine
                   :nd4j (nd4j-ops/->Factory)
                   :neanderthal (no/->Factory))
         m (model/simple-param-collection factory)
-        W (model/add-params! m [num-classes num-feats] :name "W")
-        b (model/add-params! m [num-classes] :name "b")
-        feat-vec (go/strech (cg/input "f" [num-feats]) 1)
-        activations (go/squeeze (go/+ (go/* W feat-vec) (go/strech b 1)) 1)
-        ;; keep 1 as the "correct" label
-        label (cg/input "label" [1])
-        loss (go/cross-entropy-loss activations label)
+        loss (lr-loss m num-classes num-feats)
         loss (compute/compile-graph loss factory m)
         data (doall (generate-data num-examples num-classes num-feats))
-        batch-gen #(partition 32 data)]
-    (train/sgd! m loss batch-gen {:num-iters 100 :learning-rate 0.01})
-    ))
+        batch-gen #(partition num-batch data)]
+    (train/sgd! m loss batch-gen {:num-iters num-iters :learning-rate 0.01})))
 
 (def cli-options
   ;; An option with a required argument
@@ -52,16 +53,23 @@
     :default :nd4j
     :parse-fn keyword
     :validate [#{:nd4j, :neanderthal} "Must be {nd4j, neanderthal}"]]
+   ["-b" "--num-batch NUM" "Number of batches"
+    :default 32
+    :parse-fn #(Integer/parseInt %)]
    ["-n" "--num-examples NUM" "Number of elements"
     :default 1000
     :parse-fn #(Integer/parseInt %)]
-  ["-f" "--num-feats NUM" "Number of feats"
+   ["-i" "--num-iters NUM" "Number of iters"
+    :default 100
+    :parse-fn #(Integer/parseInt %)]
+   ["-f" "--num-feats NUM" "Number of feats"
    :default 100
     :parse-fn #(Integer/parseInt %)]
    ["-h" "--help"]])
 
 (defn -main [& args]
   (let [parse (parse-opts args cli-options)]
+    (println "Parse options: " (:options parse))
     (dotimes [i 10]
       (let [start (System/currentTimeMillis)]
         (println "Training " i)

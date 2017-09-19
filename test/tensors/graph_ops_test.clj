@@ -37,9 +37,9 @@
     (let [num-classes 2
           num-feats 10
           W (cg/input "W" [num-classes num-feats])
-          b (cg/input "bias" [num-classes 1])
-          feat-vec (cg/input "f" [num-feats 1])
-          activations (squeeze (+ (* W feat-vec) b) 1)
+          b (cg/input "bias" [num-classes])
+          feat-vec (cg/input "f" [num-feats])
+          activations (+ (* W feat-vec) b)
           label (cg/input "label" [1])
           loss (cross-entropy-loss activations label)]
       (tensors/scalar-shape? (:shape loss)))))

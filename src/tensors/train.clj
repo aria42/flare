@@ -27,25 +27,33 @@
 (defn reset-batch!
   "Reset all gradients except the target node"
   [loss-node cached-zeros*]
-  ;; zero out gradients for parameters and ops nodes
+  ;; zero out gradients
   (doseq [node (graph/post-order-nodes loss-node)
-          :when (#{:op :params} (:type node))
-          :let [shape (p/safe-get node :shape)
-                grad (p/safe-get node :grad)
-                factory (p/safe-get node :factory)]]
-    (if-let [zs (get-in @cached-zeros* shape)]
-      (tensors/copy-from-input! factory grad zs)
-      (let [zs (tensors/zeros factory shape)]
-        (swap! cached-zeros* assoc shape zs)
-        (tensors/copy-from-input! factory grad zs))))
+          :let [grad (:grad node)
+                factory (p/safe-get node :factory)]
+          :when grad]
+    (tensors/fill! factory grad 0.0))
   ;; put a 1.0 on top-level gradient so backward pass
   ;; can propogate non-zero grads backwards
   (tensors/fill!
    (p/safe-get loss-node :factory)
    (p/safe-get loss-node :grad)
-   1.0 #_(fn ^double [^shorts _ ^double _] 1.0)))
+   1.0))
 
-(defn ^:static clip [^double x ^double min ^double max]
+(defn reset-graph! [node]
+  ;; clear out non-parameter gradients
+  (doseq [node (graph/post-order-nodes node)
+          :let [grad (:grad node)]
+          :when (and grad (not= :params (:type node)))]
+    (tensors/fill! (p/safe-get node :factory) grad 0.0))
+  ;; put a 1.0 on top-level gradient so backward pass
+  ;; can propogate non-zero grads backwards
+  (tensors/fill!
+   (p/safe-get node :factory)
+   (p/safe-get node :grad)
+   1.0))
+
+(defn ^:static clip ^double [^double x ^double min ^double max]
   (if (> x max)
     max
     (if (< x min)
@@ -55,14 +63,14 @@
 (defn update-params! [model batch opts]
   ;; take gradient step
   (doseq [[_ param-node] model]
-    (let [grad-clip (double (:grad-clip opts 100.00))
+    (let [grad-clip (double (:grad-clip opts 10.00))
           normalizer (/ 1.0 (double (count batch)))
           clip-min (- (Math/abs grad-clip))
           clip-max (Math/abs grad-clip)]
       (tensors/fill!
        (p/safe-get param-node :factory)
        (p/safe-get param-node :grad)
-       (fn ^double [^longs indices ^double x]
+       (fn ^double [^longs _ ^double x]
          (clip (* normalizer x) clip-min clip-max))))
     (tensors/grad-step!
      (p/safe-get param-node :factory)
@@ -73,12 +81,13 @@
 (defn run-batch! [model loss-node batch]
   (let [factory (p/safe-get loss-node :factory)]
     (loop [batch-loss 0.0 batch batch]
+      (reset-graph! loss-node)
       (if-let [input->vals (first batch)]
         (let [loss-node (compute/forward-pass! loss-node input->vals)
               loss-val (->> loss-node :value (tensors/->clj factory) first)]
           ;; side-effect to update gradients
           (compute/backward-pass! loss-node)
-          (recur (+ batch-loss 0.0 (double loss-val)) (rest batch)))
+          (recur (+ batch-loss 0.0 (double loss-val)) (next batch)))
         batch-loss))))
 
 (defn sgd-iter! [model loss-node data-gen opts]

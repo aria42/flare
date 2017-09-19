@@ -38,7 +38,7 @@
     ;; dxi/dt = dx/dt * 1
     ;; so just add output grad to inputs
     (let [df_dt (:grad node)
-          input-grads (mapv :grad (:children node))]
+          input-grads (map :grad (:children node))]
       (doseq [input-grad input-grads :when input-grad]
         (np/axpy! df_dt input-grad)))
     node))
@@ -64,8 +64,8 @@
     ;; dX/dt[m,k] = dZ/dt[m,n] Y^T [n, k]
     (let [dZ (p/safe-get node :grad)
           cs (:children node)
-          [X Y] (mapv #(p/safe-get % :value) cs)
-          [dX dY] (mapv #(p/safe-get % :grad) cs)]
+          [X Y] (map #(p/safe-get % :value) cs)
+          [dX dY] (map :grad cs)]
       ;; update dX
       (when dX
         (if (matrix? Y)
@@ -203,10 +203,11 @@
             activations (:value activations-node)]
         (when-let [act-grad (:grad activations-node)]
           (alter! act-grad
-           (fn ^double [^long idx ^double _]
-             (* loss-grad-val
-                (- (real/entry probs idx)
-                   (if (= idx gold-idx) 1.0 0.0))))))))
+           (fn ^double [^long idx ^double cur]
+             (+ cur
+                (* loss-grad-val
+                   (- (real/entry probs idx)
+                      (if (= idx gold-idx) 1.0 0.0)))))))))
     node))
 
 (def ^:private +tensor-ops+
