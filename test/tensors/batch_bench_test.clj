@@ -16,15 +16,15 @@
         num-feats 500
         M (dge num-classes num-feats)
         r (java.util.Random. 0)
-        vecs (mapv (fn [_] (dge num-feats 1)) (range n))]
+        vecs (mapv (fn [_] (dv num-feats)) (range n))]
     (alter! M (fn ^double [^double x] (.nextDouble ^java.util.Random r)))
     (doseq [v vecs]
       (alter! v (fn ^double [^double x] (if (.nextBoolean r) 1.0 0.0))))
     (let [param {:ref-name "M" :shape [num-classes num-feats] :value M}]
       (mapv (fn [v]
-              {:shape [num-classes 1]
-               :value (dge num-classes 1)
-               :children [param {:shape [num-feats 1] :value v}]})
+              {:shape [num-classes]
+               :value (dv num-classes)
+               :children [param {:shape [num-feats] :value v}]})
             vecs))))
 
 (defn serial-version [nodes]

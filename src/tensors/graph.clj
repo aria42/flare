@@ -21,5 +21,20 @@
       node)))
 
 (defn post-order-nodes [target]
-  (conj (vec (mapcat post-order-nodes (:children target))) target))
+  (let [list (java.util.ArrayList.)
+        queue (java.util.LinkedList.)]
+    (.add queue target)
+    (loop []
+      (if-let [n (.poll queue)]
+        (do
+          (.add list n)
+          (doseq [c (:children n)]
+            (.add queue c))
+          (recur))
+        (reverse list)))))
 
+(defn gen-binary [depth]
+  (if (zero? depth)
+    {:value (name (gensym "node"))}
+    {:value (name (gensym "node"))
+     :children [(gen-binary (dec depth)) (gen-binary (dec depth))]}))
