@@ -210,11 +210,40 @@
                       (if (= idx gold-idx) 1.0 0.0)))))))))
     node))
 
+(defn ^:static hadamard [out! x y]
+  (if (vctr? x)
+    (alter! out! (fn ^double [^long i ^double _]
+                   (* (real/entry x i) (real/entry y i))))
+    (alter! out! (fn ^double [^long i ^long j ^double _]
+                   (* (real/entry x i j) (real/entry y i j))))))
+
+(defrecord HadamardTensorOp []
+  compute/TensorOp
+  (ensure-valid?! [this [X Y]]
+    (ensure-valid-shape?! (:shape X))
+    (ensure-valid-shape?! (:shape Y))
+    true)
+  (prep [this node] node)
+  (forward-node-pass! [this node]
+    (let [output (p/safe-get node :value)
+          [X Y] (map :value (:children node))]
+      (hadamard output X Y)))
+  (backward-node-pass! [this node]
+    (let [dZ (p/safe-get node :grad)
+          Z (p/safe-get node :value)
+          [X Y] (map :value (:children node))
+          [dX dY] (map :grad (:children node))]
+      (when dX
+        (hadamard dX Y dZ))
+      (when dY
+        (hadamard dY X dZ)))))
+
 (def ^:private +tensor-ops+
   {:+ ->SumTensorOp
    :* ->MultTensorOp
    :squeeze ->SqueezeTensorOp
    :strech ->StrechTensorOp
+   :hadamard ->HadamardTensorOp
    :cross-entropy-loss ->CrossEntropyLossTensorOp})
 
 (defn -from-nums [nums shape]

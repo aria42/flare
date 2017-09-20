@@ -31,6 +31,13 @@
         :graph-op (->MultGraphOp)
         :children [Y X]))))
 
+(deftest hadamard-test
+  (testing "hadamard"
+    (let [X (cg/input "X" [5 5])
+          Y (cg/input "Y" [5 5])]
+      (is (= [5 5] (:shape (hadamard X Y))))
+      (is (thrown? RuntimeException (hadamard X (cg/input [5 1])))))))
+
 
 (deftest logistic-regression-test
   (testing "create logistic regression graph (make parameters inputs)"

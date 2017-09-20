@@ -119,6 +119,26 @@
        (reduce +)
        Math/sqrt))
 
+(deftest hadamard-test
+  (testing "base hadamard test"
+    (let [out (dv 3)]
+      (hadamard out (dv [1 2 3]) (dv [1 2 2]))
+      (is out (dv [1 4 6])))
+    (let [out (dge 2 2)
+          x (dge 2 2 [1 2 3 4])]
+      (hadamard out x x)
+      (is (= out (dge 2 2 [1 4 9 16])))))
+  (testing "hadamard op test"
+    (let [op (->HadamardTensorOp)
+          x {:ref-name "x" :value (dv [1 2 3]) :grad (dv 3)}
+          y {:ref-name "x" :value (dv [2 2 2]) :grad (dv 3)}
+          n {:ref-name "n" :value (dv 3) :children [x y] :grad (dv [3 3 3])}]
+      (compute/forward-node-pass! op n)
+      (is (= (dv [2 4 6]) (:value n)))
+      (compute/backward-node-pass! op n)
+      (is (= (dv [6 6 6]) (:grad x)))
+      (is (= (dv [3 6 9]) (:grad y))))))
+
 (deftest cross-entropy-loss-op
   (testing "loss = (cross-entropy scores label)"
     (let [op (->CrossEntropyLossTensorOp)

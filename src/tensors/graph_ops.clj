@@ -105,6 +105,19 @@
   (forward-shape [this [activations label :as input-nodes]]
     [1]))
 
+(defrecord HadamardProduct []
+  cg/GraphOp
+  (op-key [this] :hadamard)
+  (op-descriptor [this] "hadamard")
+  (op-validate! [this [X Y & inputs]]
+    (when (or (nil? X) (nil? Y))
+      (throw (ex-info "Invalid inputs, must have 2" {:inputs inputs})))
+    (when-not (= (:shape X) (:shape Y))
+      (throw (ex-info "Need equal shapes" {:shapes (map :shape [X Y])}))))
+  (forward-shape [this [X Y]]
+    ;; output has same shape
+    (:shape X)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Public Graph Operations
 
@@ -123,3 +136,8 @@
 
 (defn strech [input dim-to-insert]
   (cg/add-graph-op (StrechGraphOp. dim-to-insert) [input]))
+
+(defn hadamard 
+  "Output is element-wise product of two inputs"
+  [x y]
+  (cg/add-graph-op (HadamardProduct.) [x y]))
