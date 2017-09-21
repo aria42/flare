@@ -3,7 +3,9 @@
   (:require
    [tensors.core :as tensors]
    [tensors.computation-graph :as cg]
-   [schema.core :as s]))
+   [schema.core :as s]
+   [tensors.model :as model]
+   [plumbing.core :as p]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Graph Edge Operations
@@ -132,7 +134,7 @@
       (:shape X))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Public Graph Operations
+;;; Public Atomic Graph Operations
 
 
 (defn + [& inputs]
@@ -163,3 +165,19 @@
   "Output is element-wise product of two inputs"
   [x y]
   (cg/add-graph-op (HadamardProduct.) [x y]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Compund Graph Operations (usually modify model, adding params)
+
+(s/defn affine :- cg/Node
+  "create affine output, under the hood will add the
+    following parameters to the model
+     - 'affine/W' [num-out-dims first-input-dim]
+     - 'affine/b' num-out-dimes + rest-of-input-dims"
+  [m :- model/PModel input :- cg/Node num-out-dims :- s/Int]
+  (cg/with-scope "affine"
+    (let [[first-dim & rest] (p/safe-get input :shape)
+          out-shape (vec (cons num-out-dims rest))
+          W (model/add-params! m [num-out-dims first-dim] :name "W")
+          b (model/add-params! m out-shape :name "b")]
+      (+ (* W input) b))))

@@ -27,10 +27,8 @@
         {"f" rand-feats "label" [label]}))))
 
 (defn lr-loss [m num-classes num-feats]
-  (let [W (model/add-params! m [num-classes num-feats] :name "W")
-        b (model/add-params! m [num-classes] :name "b")
-        feat-vec (cg/input "f" [num-feats])
-        activations (go/+ (go/* W feat-vec) b)
+  (let [feat-vec (cg/input "f" [num-feats])
+        activations (go/affine m feat-vec num-classes)
         label (cg/input "label" [1])]
     (go/cross-entropy-loss activations label)))
 
