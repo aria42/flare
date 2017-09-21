@@ -166,6 +166,9 @@
   [x y]
   (cg/add-graph-op (HadamardProduct.) [x y]))
 
+(defn concat
+  [dim & inputs])
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Compund Graph Operations (usually modify model, adding params)
 
