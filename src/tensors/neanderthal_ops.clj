@@ -238,13 +238,58 @@
       (when dY
         (hadamard dY X dZ)))))
 
+(defrecord ElementwiseTransformOp
+  [^clojure.lang.IFn$DD fx ^clojure.lang.IFn$DD dfx]
+  compute/TensorOp
+  (ensure-valid?! [this [X]]
+    (ensure-valid-shape?! (:shape X))
+    true)
+  (prep [this node] node)
+  (forward-node-pass! [this node]
+    (let [output (p/safe-get node :value)
+          X (-> node :children first :value)]
+      (alter! output (fn ^double [^long i ^double _]
+                       (.invokePrim fx (real/entry X i))))))
+  (backward-node-pass! [this node]
+    (let [dO (p/safe-get node :grad)]
+      (when-let [dX (-> node :children first :grad)]
+        (let [X (p/safe-get node :value)]
+          (if (vctr? dX)
+            (alter! dX (fn ^double [^long i ^double _]
+                         (* (real/entry dO i)
+                            (.invokePrim dfx (real/entry X i)))))
+            (alter! dX (fn ^double [^long i ^long j ^double x]
+                         (* (real/entry dO i j)
+                            (.invokePrim dfx (real/entry X i j)))))))))))
+
+(def ^:private +elementwise-op+
+  ;; f(x) = e^x, df(x) = e^x
+  {:exp [(fn -exp ^double [^double x] (Math/exp x))
+         (fn -exp-d ^double [^double x] (Math/exp x))]
+   ;; f(x) = 1/(1+e^{-x}, df(x) = (sigmoid(x)-1)/sigmoid(x)
+   :sigmoid [(fn -sigmoid ^double [^double x]
+               (/ 1.0 (+ 1.0 (Math/exp (- x)))))
+             (fn -sigmoid-d ^double [^double x]
+               (let [sig (/ 1.0 (+ 1.0 (Math/exp (- x))))]
+                 (/ (- sig 1.0) sig)))]
+   ;; f(x) = tanh(x), df(X) = 1 - tan(x)^2
+   :tanh [(fn -tanh ^double [^double x]
+            (Math/tanh x))
+          (fn -tanh-d ^double [^double x]
+            (let [t (Math/tanh x)]
+              (- 1.0 (* t t))))]})
+
 (def ^:private +tensor-ops+
-  {:+ ->SumTensorOp
-   :* ->MultTensorOp
-   :squeeze ->SqueezeTensorOp
-   :strech ->StrechTensorOp
-   :hadamard ->HadamardTensorOp
-   :cross-entropy-loss ->CrossEntropyLossTensorOp})
+  (merge
+   {:+ ->SumTensorOp
+    :* ->MultTensorOp
+    :squeeze ->SqueezeTensorOp
+    :strech ->StrechTensorOp
+    :hadamard ->HadamardTensorOp
+    :cross-entropy-loss ->CrossEntropyLossTensorOp}
+   (p/map-vals
+    (fn [[fx dfx]] #(->ElementwiseTransformOp fx dfx))
+    +elementwise-op+)))
 
 (defn -from-nums [nums shape]
   (case (count shape)

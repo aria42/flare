@@ -118,6 +118,19 @@
     ;; output has same shape
     (:shape X)))
 
+(defn ^:private scalar-op
+  "graph operation of single argument where output is same shape"
+  [key]
+  (reify cg/GraphOp
+    (op-key [this] key)
+    (op-descriptor [this] (name key))
+    (op-validate! [this [X]]
+      (when (nil? X)
+        (throw (ex-info "Must have input" {:X X}))))
+    (forward-shape [this [X]]
+      ;; output has same shape
+      (:shape X))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Public Graph Operations
 
@@ -137,7 +150,16 @@
 (defn strech [input dim-to-insert]
   (cg/add-graph-op (StrechGraphOp. dim-to-insert) [input]))
 
-(defn hadamard 
+(defn exp [input]
+  (cg/add-graph-op (scalar-op :exp) [input]))
+
+(defn sigmoid [input]
+  (cg/add-graph-op (scalar-op :sigmoid) [input]))
+
+(defn tanh [input]
+  (cg/add-graph-op (scalar-op :tanh) [input]))
+
+(defn hadamard
   "Output is element-wise product of two inputs"
   [x y]
   (cg/add-graph-op (HadamardProduct.) [x y]))

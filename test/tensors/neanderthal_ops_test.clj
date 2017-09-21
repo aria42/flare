@@ -3,7 +3,9 @@
             [uncomplicate.neanderthal.core :refer :all]
             [uncomplicate.neanderthal.native :refer :all]
             [clojure.test :refer :all]
-            [tensors.compute :as compute]))
+            [tensors.compute :as compute]
+            [tensors.computation-graph :as cg]
+            [tensors.core :as tensors]))
 
 (deftest sum-tensor-op-test
   (testing "C = A + B"
@@ -118,6 +120,16 @@
   (->> (map (fn [x y] (Math/pow (double (- x y)) 2.0)) a b)
        (reduce +)
        Math/sqrt))
+
+(deftest elemen-transform-test
+  (let [x {:ref-name "x" :shape [3] :value (dv [1 2 3]) :grad (dv [2 2 2])}
+        fx {:ref-name "fx" :shape [3] :value (dv 3) :grad (dv 3)}]
+    (testing "exp(x) test"
+      (let [op (tensors/get-op (->Factory) :exp)]
+        (compute/forward-node-pass! op (assoc fx :children [x]))
+        (is (:value fx) (dv (map #(Math/exp %) [1 2 3])))
+        (compute/backward-node-pass! op (assoc fx :children [x]))
+        (is (:grad x) (dv (map #(* 2 (Math/exp %)) [1 2 3])))))))
 
 (deftest hadamard-test
   (testing "base hadamard test"
