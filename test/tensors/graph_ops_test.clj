@@ -50,3 +50,13 @@
           label (cg/input "label" [1])
           loss (cross-entropy-loss activations label)]
       (tensors/scalar-shape? (:shape loss)))))
+
+(deftest concat-op-test
+  (testing "concat op"
+    (let [op (->ConcatOp 0)
+          inputs [(cg/input [2 4]) (cg/input [3 4])]]
+      (is (= [5 4] (cg/forward-shape op inputs)))
+      (cg/op-validate! op inputs)
+      (is (thrown? RuntimeException
+                   (cg/op-validate! op [(cg/input [3 4]) (cg/input [3 3])]))))))
+

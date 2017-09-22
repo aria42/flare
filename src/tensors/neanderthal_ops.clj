@@ -238,6 +238,42 @@
       (when dY
         (hadamard dY X dZ)))))
 
+(defrecord ConcatTensorOp [dim-to-cat]
+  compute/TensorOp
+  (ensure-valid?! [this inputs]
+    (doseq [x inputs]
+      (ensure-valid-shape?! x))
+    true)
+  (prep [this node] node)
+  (forward-node-pass! [this node]
+    (let [output (p/safe-get node :value)
+          inputs (:children node)]
+      (loop [inputs inputs offset 0]
+        (when-let [input (first inputs)]
+          (let [len (long (nth (:shape input) dim-to-cat))
+                x (:value input)
+                [nr nc] (:shape input)]
+            (if (vctr? x)
+              (copy! x (subvector output offset len))
+              (if (= dim-to-cat 0)
+                (copy! x (submatrix output offset 0 len nc))
+                (copy! x (submatrix output 0 offset nr len))))
+            (recur (next inputs) (+ offset len)))))))
+  (backward-node-pass! [this node]
+    (let [output (p/safe-get node :grad)
+          inputs (:children node)]
+      (loop [inputs inputs offset 0]
+        (when-let [input (first inputs)]
+          (let [len (long (nth (:shape input) dim-to-cat))
+                x (:grad input)
+                [nr nc] (:shape input)]
+            (if (vctr? x)
+              (copy! (subvector output offset len) x)
+              (if (= dim-to-cat 0)
+                (copy! (submatrix output offset 0 len nc) x)
+                (copy! (submatrix output 0 offset nr len) x)))
+            (recur (next inputs) (+ offset len))))))))
+
 (defrecord ElementwiseTransformOp
   [^clojure.lang.IFn$DD fx ^clojure.lang.IFn$DD dfx]
   compute/TensorOp
@@ -286,6 +322,7 @@
     :squeeze ->SqueezeTensorOp
     :strech ->StrechTensorOp
     :hadamard ->HadamardTensorOp
+    :concat ->ConcatTensorOp
     :cross-entropy-loss ->CrossEntropyLossTensorOp}
    (p/map-vals
     (fn [[fx dfx]] #(->ElementwiseTransformOp fx dfx))

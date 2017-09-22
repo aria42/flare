@@ -181,3 +181,33 @@
                 (:grad scores)
                 [0.186 -0.693 0.506])
                0.001)))))))
+
+(deftest concat-test
+  (testing "concat forward test"
+    (let [n1 {:shape [2] :value (dv [1 2])}
+          n2 {:shape [3] :value (dv [3 4 5])}
+          o {:shape [5] :value (dv 5) :children [n1 n2]}
+          op (->ConcatTensorOp 0)]
+      (compute/forward-node-pass! op o)
+      (is (= (dv [1 2 3 4 5])(:value o))))
+    (let [n1 {:shape [1 2] :value (dge 1 2 [1 2])}
+          n2 {:shape [1 3] :value (dge 1 3 [3 4 5])}
+          o {:shape [1 5] :value (dge 1 5) :children [n1 n2]}
+          op (->ConcatTensorOp 1)]
+      (compute/forward-node-pass! op o)
+      (is (= (dge 1 5 (range 1 6))(:value o)))))
+  (testing "concat backward test"
+    (let [n1 {:shape [2] :grad (dv 2)}
+          n2 {:shape [3] :grad (dv 3)}
+          o {:shape [5] :grad (dv (range 1 6)) :children [n1 n2]}
+          op (->ConcatTensorOp 0)]
+      (compute/backward-node-pass! op o)
+      (is (= (dv [1 2])(:grad n1)))
+      (is (= (dv [3 4 5])(:grad n2))))
+    (let [n1 {:shape [1 2] :grad (dge 1 2)}
+          n2 {:shape [1 3] :grad (dge 1 3)}
+          o {:shape [1 5] :grad (dge 1 5 (range 1 6)) :children [n1 n2]}
+          op (->ConcatTensorOp 1)]
+      (compute/backward-node-pass! op o)
+      (is (= (dge 1 2 [1 2]) (:grad n1)))
+      (is (= (dge 1 3 [3 4 5]) (:grad n2))))))

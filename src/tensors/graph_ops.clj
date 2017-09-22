@@ -1,5 +1,5 @@
 (ns tensors.graph-ops
-  (:refer-clojure :exclude [+ *])
+  (:refer-clojure :exclude [+ * concat])
   (:require
    [tensors.core :as tensors]
    [tensors.computation-graph :as cg]
@@ -119,6 +119,27 @@
   (forward-shape [this [X Y]]
     ;; output has same shape
     (:shape X)))
+
+(defn vec-remove
+  "remove elem in coll"
+  [coll pos]
+  (vec (clojure.core/concat (subvec coll 0 pos) (subvec coll (inc pos)))))
+
+(defrecord ConcatOp [dim-to-cat]
+  cg/GraphOp
+  (op-key [this] :concat)
+  (op-descriptor [this] (str "concat-" dim-to-cat))
+  (op-validate! [this inputs]
+    (when (empty? inputs)
+      (throw (ex-info "Empty inputs")))
+    (let [shapes (map (comp vec :shape) inputs)
+          dropped-shapes (map #(vec-remove % dim-to-cat) shapes)]
+      (when-let [bad (some #(not= % (first dropped-shapes)) dropped-shapes)]
+        (throw (ex-info "Non-matching shpapes" {:bad shapes})))))
+  (forward-shape [this inputs]
+    (let [shapes (map (comp vec :shape) inputs)
+          concat-len (reduce clojure.core/+ (map #(nth % dim-to-cat) shapes))]
+      (assoc (first shapes) dim-to-cat concat-len))))
 
 (defn ^:private scalar-op
   "graph operation of single argument where output is same shape"
