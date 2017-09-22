@@ -24,6 +24,10 @@
     (:shape (first input-nodes)))
   (op-descriptor [this] "+"))
 
+(defn vec-remove
+  "remove elem in coll"
+  [coll pos]
+  (vec (clojure.core/concat (subvec coll 0 pos) (subvec coll (inc pos)))))
 
 (defrecord MultGraphOp []
   cg/GraphOp
@@ -67,12 +71,10 @@
         (throw (ex-info "Squeeze at ``dimension`` not 1"
                         {:dim-to-squeeze dim-to-squeeze
                          :shape shape})))
-      (into (subvec shape 0 dim-to-squeeze)
-            (subvec shape (inc dim-to-squeeze)))))
+      (vec-remove shape dim-to-squeeze)))
   (forward-shape [this inputs]
     (let [shape (vec (:shape (first inputs)))]
-      (into (subvec shape 0 dim-to-squeeze)
-            (subvec shape (inc dim-to-squeeze))))))
+      (vec-remove shape dim-to-squeeze))))
 
 (defrecord StrechGraphOp [dim-to-insert]
   cg/GraphOp
@@ -85,7 +87,7 @@
   (forward-shape [this inputs]
     (let [shape (vec (:shape (first inputs)))]
       (vec
-       (concat (subvec shape 0 dim-to-insert)
+       (clojure.core/concat (subvec shape 0 dim-to-insert)
                [1]
                (when (< (inc dim-to-insert) (count shape))
                  (subvec shape (inc dim-to-insert))))))))
@@ -119,11 +121,6 @@
   (forward-shape [this [X Y]]
     ;; output has same shape
     (:shape X)))
-
-(defn vec-remove
-  "remove elem in coll"
-  [coll pos]
-  (vec (clojure.core/concat (subvec coll 0 pos) (subvec coll (inc pos)))))
 
 (defrecord ConcatOp [dim-to-cat]
   cg/GraphOp
@@ -171,7 +168,7 @@
   (cg/add-graph-op (SqueezeGraphOp. dim-to-squeeze) [input]))
 
 (defn strech [input dim-to-insert]
-  (cg/add-graph-op (StrechGraphOp. dim-to-insert) [input]))
+  (cg/add-graph-op (->StrechGraphOp dim-to-insert) [input]))
 
 (defn exp [input]
   (cg/add-graph-op (scalar-op :exp) [input]))
