@@ -36,6 +36,8 @@
       (/ (+ (.nextGaussian r) mean) sigma))))
 
 (defprotocol PModel
+  (tensor-factory [this]
+    "return the underlying tensor factory for the model")
   (-add-params! [this param-name shape init-spec]
     "add parameters to the model, returns a param graph node. Some
      argument defaulting happens below so this is the internal method")
@@ -62,6 +64,7 @@
       (reify
 
         PModel
+        (tensor-factory [this] factory)
         (-add-params! [this param-name shape init-spec]
           (let [param-name (cg/full-node-name param-name)]
             (when-let [existing (.get m param-name)]

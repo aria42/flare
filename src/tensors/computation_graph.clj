@@ -22,6 +22,10 @@
   "Input graph node schema"
   (assoc Node :type (s/eq :input)))
 
+(s/defschema ConstantNode
+  "Input graph node schema"
+  (assoc Node :type (s/eq :constant)))
+
 (defprotocol GraphOp
   "Graph operation only needs to be aware of shape of output,
    independent of any tensor implementation."
@@ -69,6 +73,17 @@
   ([shape :- tensors/Shape]
    (input (name (gensym "input")) shape)))
 
+(s/defn constant :- ConstantNode
+  "Create input variable node, using provided input-name
+   or generating one if one isn't provided"
+  ([input-name :- String shape :- tensors/Shape value :- s/Any]
+   {:type :constant
+    :shape shape
+    :value value
+    :ref-name (full-node-name input-name)})
+  ([shape :- tensors/Shape value :- s/Any]
+   (constant (name (gensym "constant")) shape value)))
+
 (defmacro definput [input-var shape]
   `(def ~input-var (input ~(name input-var) ~shape)))
 
@@ -81,7 +96,7 @@
   {:type :op
    :shape (forward-shape op nodes)
    :graph-op op
-   :ref-name (gensym (str (name (op-key op)) ":"))
+   :ref-name (full-node-name (gensym (str (name (op-key op)) ":")))
    :children nodes})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -117,6 +132,8 @@
                                  (:children target))))
       :input
       (format "input(%s, %s)" (:ref-name target) (:shape target))
+      :params
+      (format "param(%s, %s)" (:ref-name target) (:shape target))
       ;; else
       (throw (ex-info "Bad node to summarize" {:node target})))))
   ([target :- Node] (summarize-computation target 0)))

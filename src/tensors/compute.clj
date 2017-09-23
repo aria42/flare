@@ -82,6 +82,9 @@
   (case (:type node)
     ;; don't need a gradient for inputs
     :input  (assoc node :value (tensors/zeros factory (:shape node)))
+    :constant (if-not (:value  node)
+                (assoc node (tensors/zeros factory (:shape node)))
+                node)
     :params (model/canonical-node model (:ref-name node))
     :op     (assoc node
                    :value (tensors/zeros factory (:shape node))

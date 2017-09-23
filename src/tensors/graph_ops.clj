@@ -185,7 +185,8 @@
   (cg/add-graph-op (HadamardProduct.) [x y]))
 
 (defn concat
-  [dim & inputs])
+  [dim & inputs]
+  (cg/add-graph-op (->ConcatOp dim) inputs))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Compund Graph Operations (usually modify model, adding params)

@@ -2,6 +2,9 @@
   (:require [schema.core :as s])
   (:import [java.util Random]))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Tensor Shape
+
 (s/defschema Shape
   [s/Int])
 
@@ -26,6 +29,15 @@
 
 (defn scalar-shape? [shape]
   (= shape [1]))
+
+(defn validate-shape! [key expected-shape given-shape]
+  (when-not (= expected-shape given-shape)
+    (let [data {:expected expected-shape :given given-shape :key key}]
+      (throw (ex-info "Got unexpected shape" data)))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Tensor Factory
 
 (defprotocol PFactory
   (from-nums [this nums])
