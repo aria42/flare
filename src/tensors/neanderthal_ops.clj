@@ -364,6 +364,10 @@
                   (aset dims (int 0) i)
                   (aset dims (int 1) j)
                   (.invokePrim get-val-fn dims x))))))
+  (shape [this t]
+    (if (vctr? t)
+      [(dim t)]
+      [(mrows t) (ncols t)]))
   (from-nums [this nums]
     (let [shape (tensors/guess-shape nums)]
       (-from-nums nums shape)))

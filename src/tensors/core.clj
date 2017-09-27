@@ -53,7 +53,8 @@
          a new value for that position")
   (->clj [this tensor])
   (grad-step! [this weight alpha grad])
-  (copy-from-input! [this tensor! nums]))
+  (copy-from-input! [this tensor! nums])
+  (shape [this t]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Operations built on factory
