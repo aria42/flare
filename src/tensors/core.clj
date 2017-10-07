@@ -55,17 +55,3 @@
   (grad-step! [this weight alpha grad])
   (copy-from-input! [this tensor! nums])
   (shape [this t]))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Operations built on factory
-
-(defn grad-clip! [factory grad max-val]
-  (let [max-val (Math/abs (double max-val))
-        min-val (- max-val)]
-    (fill! factory grad
-           (fn clip ^double [^longs indices ^double x]
-             (if (> x max-val)
-               max-val
-               (if (< x min-val)
-                 min-val
-                 x))))))
