@@ -7,9 +7,10 @@
             [uncomplicate.neanderthal.native :as native]
             [uncomplicate.neanderthal.real :as real]
             [schema.core :as s]
+            [clj-tuple :as clj-tuple]
             [plumbing.core :as p]))
 
-(set! *unchecked-math* :warn-on-boxed)
+(set! *unchecked-math* true)
 
 
 (defn ^:private valid-shape? [shape]

@@ -191,12 +191,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Compund Graph Operations (usually modify model, adding params)
 
-(s/defn affine :- cg/Node
+(s/defn affine
   "create affine output, under the hood will add the
     following parameters to the model
      - 'affine/W' [num-out-dims first-input-dim]
      - 'affine/b' num-out-dimes + rest-of-input-dims"
-  [m :- model/PModel input :- cg/Node num-out-dims :- s/Int]
+  [m :- model/PModel input num-out-dims :- s/Int]
   (cg/with-scope "affine"
     (let [[first-dim & rest] (p/safe-get input :shape)
           out-shape (vec (cons num-out-dims rest))

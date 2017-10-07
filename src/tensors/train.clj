@@ -89,7 +89,7 @@
   "`data-gen` should be called to yield a lazy sequence over batches. Each batch
    is a sequence of {input-name clj-tensor} maps (see schema above)"
   ([model :- model/PModel
-    target-node :- compute/CompiledRootNode
+    target-node
     data-gen :- (s/=> [DataBatch])
     opts :- TrainOpts]
    (let [factory (model/tensor-factory model)

@@ -46,8 +46,8 @@
            [output state]))))))
 
 
-(s/defn build-seq :- [cg/Node]
-  [cell :- RNNCell inputs :- [cg/Node]]
+(s/defn build-seq
+  [cell :- RNNCell inputs]
   (let [factory (cell-model cell)
         out-dim (output-dim cell)
         zero  (tensors/zeros factory [out-dim])

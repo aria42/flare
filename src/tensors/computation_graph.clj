@@ -1,30 +1,15 @@
-
 (ns tensors.computation-graph
   (:refer-clojure :exclude [+ *])
   (:require [schema.core :as s]
             [tensors.core :as tensors]
             [tensors.graph :as graph]
             [clojure.string :as str]
-            [tensors.graph :as graph]))
+            [tensors.node :as node]
+            [tensors.graph :as graph])
+  (:import [clojure.lang Keyword]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Schemas + Protocols
-
-(s/defschema Node
-  "Generic graph node schema"
-  {:type s/Keyword
-   :shape tensors/Shape
-   :ref-name s/Str
-   ;; other keys are allowed
-   s/Any s/Any})
-
-(s/defschema InputNode
-  "Input graph node schema"
-  (assoc Node :type (s/eq :input)))
-
-(s/defschema ConstantNode
-  "Input graph node schema"
-  (assoc Node :type (s/eq :constant)))
 
 (defprotocol GraphOp
   "Graph operation only needs to be aware of shape of output,
@@ -39,13 +24,6 @@
   (op-descriptor [this]
     "returns a text description of the operation, useful for generating
      equations of the graph computations"))
-
-(s/defschema OpNode
-  "Graph operation node schema"
-  (assoc Node
-         :type (s/eq :op)
-         :graph-op GraphOp
-         :children [Node]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Making Graph Nodes
@@ -63,20 +41,22 @@
              (conj *current-input-scope* (name ~scope-name))]
      ~@body))
 
-(s/defn input :- InputNode
+(s/defn input
   "Create input variable node, using provided input-name
    or generating one if one isn't provided"
   ([input-name :- String shape :- tensors/Shape]
-   {:type :input
-    :shape shape
-    :ref-name (full-node-name input-name)})
+   (node/map->Node
+    {:type :input
+     :shape shape
+     :ref-name (full-node-name input-name)}))
   ([shape :- tensors/Shape]
    (input (name (gensym "input")) shape)))
 
-(s/defn constant :- ConstantNode
+(s/defn constant
   "Create input variable node, using provided input-name
    or generating one if one isn't provided"
-  ([input-name :- String shape :- tensors/Shape value :- s/Any]
+  [input-name :- String shape :- tensors/Shape value :- s/Any]
+  (node/map->Node
    {:type :constant
     :shape shape
     :value value
@@ -90,14 +70,15 @@
 (defmacro defparams [params-var shape]
   `(def ~params-var (params ~(name params-var) ~shape)))
 
-(s/defn add-graph-op :- OpNode
-  [op :- GraphOp  nodes :- [Node]]
+(s/defn add-graph-op
+  [op :- GraphOp  nodes]
   (op-validate! op nodes)
-  {:type :op
-   :shape (forward-shape op nodes)
-   :graph-op op
-   :ref-name (full-node-name (gensym (str (name (op-key op)) ":")))
-   :children nodes})
+  (node/map->Node
+   {:type :op
+    :shape (forward-shape op nodes)
+    :graph-op op
+    :ref-name (full-node-name (gensym (str (name (op-key op)) ":")))
+    :children nodes}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Display/Summarize Graphs
@@ -109,7 +90,7 @@
     (:ref-name node)))
 
 (s/defn generate-equations :- [s/Str]
-  [target :- Node]
+  [target]
   (for [n (graph/post-order-nodes target) :when (= (:type n) :op)]
     (format "%s = (%s %s) ;; shape: %s"
             (:ref-name n)
@@ -119,7 +100,7 @@
 
 (s/defn summarize-computation
   "Create informative s-expression for computation"  
-  ([target :- Node indent :- s/Int]
+  ([target indent :- s/Int]
    (str
     (when (> indent 0)
       (str "\n" (str/join (repeat indent "  "))))
@@ -136,4 +117,4 @@
       (format "param(%s, %s)" (:ref-name target) (:shape target))
       ;; else
       (throw (ex-info "Bad node to summarize" {:node target})))))
-  ([target :- Node] (summarize-computation target 0)))
+  ([target] (summarize-computation target 0)))

@@ -4,7 +4,8 @@
             [tensors.core :as tensors]
             [tensors.computation-graph :as cg]
             [tensors.cache-pool :as cache-pool]
-            [tensors.model :as model]))
+            [tensors.model :as model]
+            [tensors.node :as node]))
 
 (s/defschema InitParamSpec
   "Spec for how to generate parameter entries independently
@@ -14,12 +15,6 @@
    s/Any s/Any})
 
 (defmulti ^clojure.lang.IFn$ODD get-param-rng :distribution)
-
-(s/defschema ParamsNode
-  "Params graph node schema"
-  (assoc cg/Node
-         :init InitParamSpec
-         :type (s/eq :params)))
 
 (defmethod get-param-rng :uniform
   [{:keys [rand-seed, lower, upper]}]
@@ -44,7 +39,7 @@
     "add parameters to the model, returns a param graph node. Some
      argument defaulting happens below so this is the internal method")
   (canonical-node [this param-name]
-    "returns a caonical `ParamNode` for the parameter. If parameters
+    "returns a caonical `Node` for the parameter. If parameters
      have been initialized, also returns `:value` and `:grad` tensor fields"))
 
 (defn add-params!
@@ -78,13 +73,14 @@
           (let [param-name (cg/full-node-name param-name)]
             (when-let [existing (.get m param-name)]
               (throw (ex-info "Existing param key" {:existing existing})))
-            (let [node {:type :params
-                        :ref-name param-name
-                        :value (tensors/zeros factory shape)
-                        :grad (tensors/zeros factory shape)
-                        :factory factory
-                        :shape shape
-                        :init init-spec}
+            (let [node (node/map->Node
+                        {:type :params
+                         :ref-name param-name
+                         :value (tensors/zeros factory shape)
+                         :grad (tensors/zeros factory shape)
+                         :factory factory
+                         :shape shape
+                         :init init-spec})
                   get-param-val (get-param-rng init-spec)]
               ;; initialize param vals from init-spec
               (tensors/fill! factory (:value node) get-param-val)

@@ -7,15 +7,11 @@
             [clojure.set :as set]
             [tensors.graph-ops :as go]
             [tensors.model :as model]
-            [tensors.cache-pool :as cache-pool]))
+            [tensors.cache-pool :as cache-pool])
+  (:import [tensors.node Node]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Compiled Graph Protocols + Operations
-
-(s/defschema CompiledNode
-  (assoc cg/Node
-         :value s/Any
-         :grad s/Any))
 
 (defprotocol TensorOp
   (ensure-valid?! [this input-nodes]
@@ -52,59 +48,51 @@
    (fn [n] (backward-node-pass! tensor-op n))
    nodes))
 
-(s/defschema CompiledOpNode
-  "Compiled operation has a tensor operation associated with
-  with the CompiledNode as well as the graph operation definition"
-  (merge CompiledNode
-         cg/OpNode
-         {:tensor-op TensorOp}))
-
-(s/defschema CompiledRootNode
-  (assoc CompiledNode
-         :compiled? (s/eq true)
-         ;; contains model for underlying parameters
-         ;; used to fill values with model values
-         ;; to allow for parameter sharing
-         :model model/PModel))
-
 (s/defn ensure-tensor-op
   "valdiates that tensor op valid for a computation,
    delegates down to `TensorOp` itself via `TensorFactory`"
   [factory :- tensors/PFactory
-   result-node  :- cg/Node
-   arg-nodes :- [cg/Node]]
-  (let [op-key (-> result-node :graph-op cg/op-key)
+   result-node  :- Node
+   arg-nodes :- [Node]]
+  (let [op-key (-> result-node .graph-op cg/op-key)
         tensor-op (tensors/get-op factory op-key)]
     (ensure-valid?! tensor-op arg-nodes)
     tensor-op))
 
-(defn ensure-tensor! [node key factory]
+(defn return-key [key]
+  (cond (identical? key :value) ::return-value
+        (identical? key :grad) ::return-grad
+        :else (throw (ex-info "Bad key" {:key key}))))
+
+(defn ensure-tensor! [^Node node key factory]
   (let [cache (-> factory meta :cache)
-        t (cache-pool/get-obj cache (:shape node))
-        return-fn #(cache-pool/return-obj cache (:shape node) t)]
-    (when (= key :grad)
+        t (cache-pool/get-obj cache (.shape node))
+        return-fn #(cache-pool/return-obj cache (.shape node) t)]
+    (when (identical? key :grad)
       (tensors/fill! factory t 0.0))
     (-> node
         (assoc key t)
-        (with-meta (merge (meta node) {[::return key] return-fn})))))
+        (with-meta (assoc (meta node) (return-key key) return-fn)))))
 
 (defn release-tensor! [node key]
-  (when-let [return-fn (-> node meta (get [::return key]))]
+  (when-let [return-fn (-> node meta (get (return-key key)))]
     (return-fn))
-  (dissoc node key))
+  ;; dissoc on record will convert to map
+  ;; if you remove a base key
+  (assoc node key nil))
 
-(defn with-tensors [node factory model]
-  (case (:type node)
+(defn with-tensors [^Node node factory model]
+  (case (.type node)
     ;; must create a new vlaue
     :input (ensure-tensor! node :value factory)
     :constant (throw (ex-info "Not Supported"))
     ;; re-use the model values
-    :params (model/canonical-node model (:ref-name node))
+    :params (model/canonical-node model (.ref-name node))
     ;; new values + grad
     :op (-> node (ensure-tensor! :value factory) (ensure-tensor! :grad factory))))
 
-(defn with-release-tensors [node]
-  (case (:type node)
+(defn with-release-tensors [^Node node]
+  (case (.type node)
     ;; must create a new vlaue
     :input (release-tensor! node :value)
     :constant (throw (ex-info "Not Supported"))
@@ -113,50 +101,33 @@
     :params nil)
   node)
 
-(defn with-tensor-op [node factory]
-  (if (= (:type node) :op)
-    (let [tensor-op (ensure-tensor-op factory node (:children node))]
+(defn with-tensor-op [^Node node factory]
+  (if (identical? (.type node) :op)
+    (let [tensor-op (ensure-tensor-op factory node (.children node))]
       (assoc (prep tensor-op node)
              :tensor-op tensor-op))
     node))
 
-(defn validate-graph! [node]
-  (let [all-nodes (graph/post-order-nodes node)
-        type->nodes (group-by :type all-nodes)
-        inputs (:input type->nodes)
-        params (:params type->nodes)
-        op-nodes (:op type->nodes)
-        name->op-nodes (group-by :ref-name op-nodes)]
-    ;; ensure inputs are leaves
-    (when-let [non-leaf-input (seq (filter (comp seq :children) inputs))]
-      (throw (ex-info "Non-leaf input nodes" {:bad non-leaf-input})))
-    ;; ensure params are leaves
-    (when-let [non-leaf-params (seq (filter (comp seq :children) params))]
-      (throw (ex-info "Non-leaf param nodes" {:bad non-leaf-params})))
-    ;; ensure no duplicate names for nodes
-    (when-let [duplicate (some #(> (count (val %)) 1) name->op-nodes)]
-      (throw (ex-info "Op node names need to be unique"
-                      {:duplicate duplicate})))))
-
-(defn -compile-hack [node factory input->vals model]
-  (let [node  (-> node
-                  (with-tensors factory model)
-                  (with-tensor-op factory))]
-    (when (= :input (p/safe-get node :type))
-      (let [vals (p/safe-get input->vals (:ref-name node))]
-        (tensors/copy-from-input! factory (p/safe-get node :value) vals)))
+(defn -compile-hack [^Node node factory input->vals model]
+  (let [^Node node  (-> node
+                        (with-tensors factory model)
+                        (with-tensor-op factory))]
+    (when (identical? :input (.type node))
+      (let [vals (p/safe-get input->vals (.ref-name node))]
+        (assert (.value node))
+        (tensors/copy-from-input! factory (.value node) vals)))
     node))
 
 (defn forward-pass!
   "forward-pass will topographic walk through graph writing to `:value`
   key on all compiled nodes. You can then look up and retrieve the tensors
   associated with any node"
-  [target model input->vals]
+  [^Node target model input->vals]
   (let [provided-keys (set (keys input->vals))
         nodes (graph/post-order-nodes target)
         factory (model/tensor-factory model)
-        input->node (p/for-map [n nodes :when (= :input (:type n))]
-                               (:ref-name n) n)
+        input->node (p/for-map [^Node n nodes :when (identical? :input (.type n))]
+                               (.ref-name n) n)
         existing-keys (set (keys input->vals))]
     ;; Ensure provided expected input values
     (when-let [missing (seq (set/difference existing-keys provided-keys))]
@@ -164,29 +135,26 @@
     ;; Copy input values to node tensors
     (graph/bottom-up-walk
      target
-     (fn walk-fn [node]
-       (let [node (-compile-hack node factory input->vals model)]
-         (if-not (seq (:children node))
+     (fn walk-fn [^Node node]
+       (let [^Node node (-compile-hack node factory input->vals model)]
+         (if-not (seq (.children node))
            ;; leaf node has no computation
            node
            ;; op node, fetch tensor-op
            ;; execute forward computation
-           (let [tensor-op (:tensor-op node)]
-             (p/safe-get node :value)
+           (let [tensor-op (.tensor-op node)]
              (forward-node-pass! tensor-op node))))))))
 
 (defn backward-pass-walk
-  [node]
+  [^Node node]
   (with-release-tensors
-    (if-not (= :op (:type node))
+    (if-not (identical? :op (.type node))
       node
-      (let [tensor-op (p/safe-get node :tensor-op)]
-        (p/safe-get node :grad)
-        (backward-node-pass! tensor-op node)))))
+      (backward-node-pass! (.tensor-op node) node))))
 
-(s/defn backward-pass!
+(defn backward-pass!
   "backward-pass through all the parameter nodes associated with
    the graph computation, will write to `:grad` key for all nodes
    that have gradients (basically non-inputs) in graph"
-  [target :- CompiledRootNode]
+  [target]
   (graph/top-down-walk target backward-pass-walk))
