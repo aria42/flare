@@ -115,29 +115,24 @@
       (throw (ex-info "Op node names need to be unique"
                       {:duplicate duplicate})))))
 
-(s/defn compile-graph :- CompiledRootNode
-  [target-node :- cg/Node
-   factory :- tensors/PFactory
-   model :- model/PModel]
-  (validate-graph! target-node)
-  (let [compile-walk (fn [node]
-                       (-> node
-                           (assoc :factory factory)
-                           (with-tensors factory model)
-                           (with-tensor-op factory)))
-        compiled-target (graph/bottom-up-walk  target-node compile-walk)
-        compiled-nodes (graph/post-order-nodes compiled-target)]
-    (assoc compiled-target
-           :compiled? true
-           :model model)))
+(defn -compile-hack [node factory input->vals model]
+  (let [node  (-> node
+                  (assoc :factory factory)
+                  (with-tensors factory model)
+                  (with-tensor-op factory))]
+    (when (= :input (p/safe-get node :type))
+      (let [vals (p/safe-get input->vals (:ref-name node))]
+        (tensors/copy-from-input! factory (p/safe-get node :value) vals)))
+    node))
 
 (defn forward-pass!
   "forward-pass will topographic walk through graph writing to `:value`
   key on all compiled nodes. You can then look up and retrieve the tensors
   associated with any node"
-  [target input->vals]
+  [target model input->vals]
   (let [provided-keys (set (keys input->vals))
         nodes (graph/post-order-nodes target)
+        factory (model/tensor-factory model)
         input->node (p/for-map [n nodes :when (= :input(:type n))]
                                (:ref-name n) n)
         existing-keys (set (keys input->vals))]
@@ -145,23 +140,18 @@
     (when-let [missing (seq (set/difference existing-keys provided-keys))]
       (throw (ex-info "Missing input needed" {:missing missing})))
     ;; Copy input values to node tensors
-    (doseq [[name node] input->node
-            :let [factory (p/safe-get node :factory)
-                  value (p/safe-get node :value)
-                  provided-vals (p/safe-get input->vals name)]]
-      (tensors/copy-from-input! factory value provided-vals))
-    ;; Bottom up walk to compute forward values
     (graph/bottom-up-walk
      target
      (fn walk-fn [node]
-       (if-not (seq (:children node))
-         ;; leaf node has no computation
-         node
-         ;; op node, fetch tensor-op
-         ;; execute forward computation
-         (let [tensor-op (:tensor-op node)]
-           (p/safe-get node :value)
-           (forward-node-pass! tensor-op node)))))))
+       (let [node (-compile-hack node factory input->vals model)]
+         (if-not (seq (:children node))
+           ;; leaf node has no computation
+           node
+           ;; op node, fetch tensor-op
+           ;; execute forward computation
+           (let [tensor-op (:tensor-op node)]
+             (p/safe-get node :value)
+             (forward-node-pass! tensor-op node))))))))
 
 (defn backward-pass-walk
   [node]

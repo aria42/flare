@@ -40,7 +40,6 @@
                   :neanderthal (no/->Factory))
         m (model/simple-param-collection factory)
         loss (lr-loss m num-classes num-feats)
-        loss (compute/compile-graph loss factory m)
         data (doall (generate-data num-examples num-classes num-feats))
         batch-gen #(partition num-batch data)]
     (train/sgd! m loss batch-gen {:num-iters num-iters :learning-rate 0.01})))

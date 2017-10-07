@@ -1,5 +1,5 @@
 (ns tensors.graph-ops-test
-  (:refer-clojure :exclude [+ *])
+  (:refer-clojure :exclude [+ * concat])
   (:require [tensors.graph-ops :refer :all]
             [tensors.computation-graph :as cg]
             [tensors.core :as tensors]

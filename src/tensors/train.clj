@@ -83,7 +83,7 @@
     (loop [batch-loss 0.0 batch batch]
       (reset-graph! loss-node all-nodes)
       (if-let [input->vals (first batch)]
-        (let [loss-node (compute/forward-pass! loss-node input->vals)
+        (let [loss-node (compute/forward-pass! loss-node model input->vals)
               loss-val (->> loss-node :value (tensors/->clj factory) first)]
           ;; side-effect to update gradients
           (compute/backward-pass! loss-node)
