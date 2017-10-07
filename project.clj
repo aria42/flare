@@ -10,6 +10,6 @@
                  [org.nd4j/nd4j-api "0.9.1"]
                  [prismatic/schema "1.1.6"]
                  [prismatic/plumbing "0.5.4"]
-                 [uncomplicate/neanderthal "0.14.0"]
+                 [uncomplicate/neanderthal "0.16.1"]
                  [criterium "0.4.4"]
                  [org.clojure/tools.cli "0.3.5"]])

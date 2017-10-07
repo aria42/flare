@@ -1,3 +1,5 @@
+(set! *unchecked-math* true)
+
 (ns tensors.neanderthal-ops
   (:use [uncomplicate.neanderthal core native])
   (:require [tensors.graph :as graph]
@@ -7,11 +9,8 @@
             [uncomplicate.neanderthal.native :as native]
             [uncomplicate.neanderthal.real :as real]
             [schema.core :as s]
-            [clj-tuple :as clj-tuple]
-            [plumbing.core :as p]))
-
-(set! *unchecked-math* true)
-
+            [plumbing.core :as p])
+  (:import [tensors.node Node]))
 
 (defn ^:private valid-shape? [shape]
   (<= (count shape) 2))
@@ -24,10 +23,11 @@
 (defrecord SumTensorOp []
   compute/TensorOp
   (ensure-valid?! [this input-nodes]
-    (doseq [n input-nodes] (ensure-valid-shape?! (:shape n))))
+    (doseq [^Node n input-nodes] (ensure-valid-shape?! (.shape n))))
   (forward-node-pass! [this node]
-    (let [output (:value node)
-          inputs (mapv :value (:children node))]
+    (let [^Node node node
+          output (.value node)
+          inputs (mapv #(.value ^Node %) (.children node))]
       (copy! (first inputs) output)
       (doseq [input (rest inputs)]
         (np/axpy! 1.0 input output)))
@@ -38,8 +38,9 @@
     ;; x = x1 + ... + xn
     ;; dxi/dt = dx/dt * 1
     ;; so just add output grad to inputs
-    (let [df_dt (:grad node)
-          input-grads (map :grad (:children node))]
+    (let [^Node node node
+          df_dt (.grad node)
+          input-grads (map #(.grad ^Node %) (.children node))]
       (doseq [input-grad input-grads :when input-grad]
         (np/axpy! df_dt input-grad)))
     node))
@@ -47,14 +48,16 @@
 (defrecord MultTensorOp []
   compute/TensorOp
   (ensure-valid?! [this input-nodes]
-    (doseq [n input-nodes] (ensure-valid-shape?! (:shape n)))
+    (doseq [^Node n input-nodes] (ensure-valid-shape?! (.shape n)))
     (when-not (= 2 (count input-nodes))
       (throw (ex-info "Must have two arguments to MultTensorOp"))))
   (prep [this node]
     node)
   (forward-node-pass! [this node]
-    (let [out (p/safe-get node :value)
-          [a b] (map #(p/safe-get % :value) (:children node))]
+    (let [^Node node node
+          out (.value node)
+          _ (when-not out (throw (ex-info "Missing .value" {:node node})))
+          [a b] (map #(.value ^Node %) (.children node))]
       ;; mm!/mv! will add, so need to clear first
       (if (vctr? b)
         (mv! 1.0 a b 0.0 out)
@@ -63,10 +66,11 @@
   (backward-node-pass! [this node]
     ;; Z[m,n] = X[m,k] Y[k,n]
     ;; dX/dt[m,k] = dZ/dt[m,n] Y^T [n, k]
-    (let [dZ (p/safe-get node :grad)
-          cs (:children node)
-          [X Y] (map #(p/safe-get % :value) cs)
-          [dX dY] (map :grad cs)]
+    (let [^Node node node
+          dZ (.grad node)
+          cs (.children node)
+          [X Y] (map #(.value ^Node %) cs)
+          [dX dY] (map #(.grad ^Node %) cs)]
       ;; update dX
       (when dX
         (if (matrix? Y)
@@ -125,15 +129,16 @@
 (defrecord SqueezeTensorOp []
   compute/TensorOp
   (ensure-valid?! [this input-nodes]
-    (when-not (= 2 (count (:shape (first input-nodes))))
+    (when-not (= 2 (count (.shape ^Node (first input-nodes))))
       (throw (ex-info "Need matrix shape"
-                      {:shape (:shape (first input-nodes))}))))
+                      {:shape (.shape ^Node (first input-nodes))}))))
   (prep [this node]
     node)
   (forward-node-pass! [this node]
-    (let [output (:value node)
-          input (-> node :children first :value)]
-      (copy! (view-vctr input) output))
+    (let [^Node node node
+          output (.value node)
+          ^Node input (-> node .children first)]
+      (copy! (view-vctr (.value input)) output))
     node)
   (backward-node-pass! [this node]
     (let [out-grad (:grad node)
@@ -151,14 +156,16 @@
   (prep [this node]
     node)
   (forward-node-pass! [this node]
-    (let [output (:value node)
-          input (-> node :children first :value)]
-      (copy! input (view-vctr output)))
+    (let [^Node node node
+          output (.value node)
+          ^Node input (-> node .children first)]
+      (copy! (.value input) (view-vctr output)))
     node)
   (backward-node-pass! [this node]
-    (let [out-grad (:grad node)
-          in-grad (-> node :children first :grad)]
-      (when in-grad
+    (let [^Node node node
+          out-grad (.grad node)
+          ^Node in (-> node .children first)]
+      (when-let [in-grad (.grad in)]
         (axpy! out-grad (view-ge in-grad))))
     node))
 
@@ -177,32 +184,35 @@
   (ensure-valid?! [this [activations label]]
     true)
   (prep [this node]
-    (let [[activations-node label-node] (:children node)
-          len (-> activations-node :shape first)]
+    (let [^Node node node
+          [^Node activations-node ^Node label-node] (.children node)
+          len (-> activations-node .shape first)]
       (assoc node ::probs (dv len))))
   (forward-node-pass! [this node]
-    (let [[activations-node label-node] (:children node)
-          activations (-> activations-node :value)
+    (let [^Node node node
+          [^Node activations-node ^Node label-node] (:children node)
+          activations (.value activations-node)
           probs (soft-max! activations (p/safe-get node ::probs))
-          label (-> label-node :value (entry 0) long)
+          label (-> label-node .value (entry 0) long)
           correct-prob (real/entry probs label)]
       (when (>= label (dim probs))
         (throw (ex-info "Label index out-of-bounds"
                         {:label label
                          :dim (dim activations)})))
-      (real/entry! (:value node) 0 (- (Math/log correct-prob)))
+      (real/entry! (.value node) 0 (- (Math/log correct-prob)))
       node))
   (backward-node-pass! [this node]
-    (let [[activations-node label-node] (:children node)
+    (let [^Node node node
+          [^Node activations-node ^Node label-node] (.children node)
           probs (p/safe-get node ::probs)
-          loss-grad-val (-> node :grad (real/entry 0))]
+          loss-grad-val (-> node .grad (real/entry 0))]
       ;; l = (i == label) log(pi)
-      (when-let [g (:grad label-node)]
+      (when-let [g (.grad label-node)]
         (throw (ex-info "Don't support label differentiation")))
       ;; d pi / dt = dl/dt (1.0/pi)
-      (let [gold-idx (long (first (:value label-node)))
-            activations (:value activations-node)]
-        (when-let [act-grad (:grad activations-node)]
+      (let [gold-idx (long (first (.value label-node)))
+            activations (.value activations-node)]
+        (when-let [act-grad (.grad activations-node)]
           (alter! act-grad
            (fn ^double [^long idx ^double cur]
              (+ cur

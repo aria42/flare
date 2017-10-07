@@ -1,3 +1,5 @@
+(set! *unchecked-math* true)
+
 (ns tensors.examples.logistic-regression
   (:gen-class)
   (:require [tensors.neanderthal-ops :as no]

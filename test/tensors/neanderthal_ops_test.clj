@@ -5,20 +5,24 @@
             [clojure.test :refer :all]
             [tensors.compute :as compute]
             [tensors.computation-graph :as cg]
-            [tensors.core :as tensors]))
+            [tensors.core :as tensors]
+            [tensors.node :as node]))
 
 (deftest sum-tensor-op-test
   (testing "C = A + B"
     (let [op (->SumTensorOp)
-          A {:shape [2 2]
-             :value (dge 2 2[1 2 3 4])
-             :grad (dge 2 2)}
-          B {:shape [2 2]
-             :value (dge 2 2[1 2 3 4])
-             :grad (dge 2 2)}
-          C {:shape [2 2]
-             :value (dge 2 2)
-             :grad (dge 2 2)}
+          A (node/map->Node
+             {:shape [2 2]
+              :value (dge 2 2[1 2 3 4])
+              :grad (dge 2 2)})
+          B (node/map->Node
+             {:shape [2 2]
+              :value (dge 2 2[1 2 3 4])
+              :grad (dge 2 2)})
+          C (node/map->Node
+             {:shape [2 2]
+              :value (dge 2 2)
+              :grad (dge 2 2)})
           node (assoc C :children [A, B])]
       (compute/ensure-valid?! op [A B])
       (let [forward-node (compute/forward-node-pass! op node)]
@@ -34,15 +38,18 @@
 (deftest mult-tensor-op
   (testing "C = A B"
     (let [op (->MultTensorOp)
-          A {:shape [2 1]
-             :value (dge 2 1 [1 2])
-             :grad (dge 2 1)}
-          B {:shape [1 2]
-             :value (dge 1 2 [3 4])
-             :grad (dge 1 2)}
-          C {:shape [2 2]
-             :value (dge 2 2)
-             :grad (dge 2 2)}
+          A (node/map->Node
+             {:shape [2 1]
+              :value (dge 2 1 [1 2])
+              :grad (dge 2 1)})
+          B (node/map->Node
+             {:shape [1 2]
+              :value (dge 1 2 [3 4])
+              :grad (dge 1 2)})
+          C (node/map->Node
+             {:shape [2 2]
+              :value (dge 2 2)
+              :grad (dge 2 2)})
           node (assoc C :children [A, B])]
       (compute/ensure-valid?! op [A B])
       (let [forward-node (compute/forward-node-pass! op node)]
@@ -56,15 +63,17 @@
         (is (= (:grad A) (dge 2 1 [7 7]))))))
   (testing "c = A b (matrix * vector)"
     (let [op (->MultTensorOp)
-          A {:shape [2 3]
-             :value (dge 2 3 [1 2 3 4 5 6])
-             :grad (dge 2 3)}
-          b {:shape [3]
-             :value (dv [1 1 1])
-             :grad (dv 3)}
-          c {:shape [2]
-             :value (dv 2)
-             :grad (dv 2)}
+          A (node/map->Node {:shape [2 3]
+              :value (dge 2 3 [1 2 3 4 5 6])
+              :grad (dge 2 3)})
+          b (node/map->Node
+             {:shape [3]
+              :value (dv [1 1 1])
+              :grad (dv 3)})
+          c (node/map->Node
+             {:shape [2]
+              :value (dv 2)
+              :grad (dv 2)})
           node (assoc c :children [A, b])]
       (compute/ensure-valid?! op [A b])
       (let [forward-node (compute/forward-node-pass! op node)]
@@ -80,12 +89,14 @@
 (deftest squeeze-op
   (testing "B = (squeeze A 1)"
     (let [op (->SqueezeTensorOp)
-          A {:shape [2 1]
-             :value (dge 2 1 [1 1])
-             :grad (dge 2 1 [1 1])}
-          B {:shape [2]
-             :value (dv 2)
-             :grad (dv [1 1])}
+          A (node/map->Node
+             {:shape [2 1]
+              :value (dge 2 1 [1 1])
+              :grad (dge 2 1 [1 1])})
+          B (node/map->Node
+             {:shape [2]
+              :value (dv 2)
+              :grad (dv [1 1])})
           node (assoc B :children [A])]
       (compute/ensure-valid?! op [A])
       (let [forward-node (compute/forward-node-pass! op node)]
@@ -100,12 +111,14 @@
 (deftest strech-op
   (testing "B = (strech A 1)"
     (let [op (->StrechTensorOp)
-          A {:shape [2]
-             :value (dv [1 1])
-             :grad (dv [0 0])}
-          B {:shape [2 1]
-             :value (dge 2 1 [1 1])
-             :grad (dge 2 1 [1 1])}
+          A (node/map->Node
+             {:shape [2]
+              :value (dv [1 1])
+              :grad (dv [0 0])})
+          B (node/map->Node
+             {:shape [2 1]
+              :value (dge 2 1 [1 1])
+              :grad (dge 2 1 [1 1])})
           node (assoc B :children [A])]
       (compute/ensure-valid?! op [A])
       (let [forward-node (compute/forward-node-pass! op node)]
@@ -154,14 +167,17 @@
 (deftest cross-entropy-loss-op
   (testing "loss = (cross-entropy scores label)"
     (let [op (->CrossEntropyLossTensorOp)
-          scores {:shape [3]
-                  :value (dv [1 1.5 2])
-                  :grad (dv [0 0 0])}
-          label {:shape [1]
-                 :value (dv [1])}
-          loss {:shape [1]
-                :value (dv [0.0])
-                :grad (dv [1.0])}
+          scores (node/map->Node
+                  {:shape [3]
+                   :value (dv [1 1.5 2])
+                   :grad (dv [0 0 0])})
+          label (node/map->Node
+                 {:shape [1]
+                  :value (dv [1])})
+          loss (node/map->Node
+                {:shape [1]
+                 :value (dv [0.0])
+                 :grad (dv [1.0])})
           node (assoc loss :children [scores label])]
       (compute/ensure-valid?! op [scores label])
       (let [node (compute/prep op node)
@@ -184,29 +200,29 @@
 
 (deftest concat-test
   (testing "concat forward test"
-    (let [n1 {:shape [2] :value (dv [1 2])}
-          n2 {:shape [3] :value (dv [3 4 5])}
-          o {:shape [5] :value (dv 5) :children [n1 n2]}
+    (let [n1 (node/map->Node {:shape [2] :value (dv [1 2])})
+          n2 (node/map->Node {:shape [3] :value (dv [3 4 5])})
+          o (node/map->Node {:shape [5] :value (dv 5) :children [n1 n2]})
           op (->ConcatTensorOp 0)]
       (compute/forward-node-pass! op o)
       (is (= (dv [1 2 3 4 5])(:value o))))
-    (let [n1 {:shape [1 2] :value (dge 1 2 [1 2])}
-          n2 {:shape [1 3] :value (dge 1 3 [3 4 5])}
-          o {:shape [1 5] :value (dge 1 5) :children [n1 n2]}
+    (let [n1 (node/map->Node {:shape [1 2] :value (dge 1 2 [1 2])})
+          n2 (node/map->Node {:shape [1 3] :value (dge 1 3 [3 4 5])})
+          o (node/map->Node {:shape [1 5] :value (dge 1 5) :children [n1 n2]})
           op (->ConcatTensorOp 1)]
       (compute/forward-node-pass! op o)
       (is (= (dge 1 5 (range 1 6))(:value o)))))
   (testing "concat backward test"
-    (let [n1 {:shape [2] :grad (dv 2)}
-          n2 {:shape [3] :grad (dv 3)}
-          o {:shape [5] :grad (dv (range 1 6)) :children [n1 n2]}
+    (let [n1 (node/map->Node {:shape [2] :grad (dv 2)})
+          n2 (node/map->Node {:shape [3] :grad (dv 3)})
+          o (node/map->Node {:shape [5] :grad (dv (range 1 6)) :children [n1 n2]})
           op (->ConcatTensorOp 0)]
       (compute/backward-node-pass! op o)
       (is (= (dv [1 2])(:grad n1)))
       (is (= (dv [3 4 5])(:grad n2))))
-    (let [n1 {:shape [1 2] :grad (dge 1 2)}
-          n2 {:shape [1 3] :grad (dge 1 3)}
-          o {:shape [1 5] :grad (dge 1 5 (range 1 6)) :children [n1 n2]}
+    (let [n1 (node/map->Node {:shape [1 2] :grad (dge 1 2)})
+          n2 (node/map->Node {:shape [1 3] :grad (dge 1 3)})
+          o (node/map->Node {:shape [1 5] :grad (dge 1 5 (range 1 6)) :children [n1 n2]})
           op (->ConcatTensorOp 1)]
       (compute/backward-node-pass! op o)
       (is (= (dge 1 2 [1 2]) (:grad n1)))
