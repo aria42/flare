@@ -6,7 +6,8 @@
             [schema.core :as s]
             [clojure.set :as set]
             [tensors.graph-ops :as go]
-            [tensors.model :as model]))
+            [tensors.model :as model]
+            [tensors.cache-pool :as cache-pool]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Compiled Graph Protocols + Operations
@@ -78,10 +79,18 @@
     tensor-op))
 
 (defn ensure-tensor! [node key factory]
-  (if-let [v (get node key)]
-    (do (tensors/fill! factory v 0.0)
-        node)
-    (assoc node key (tensors/zeros factory (:shape node)))))
+  (let [cache (-> factory meta :cache)
+        t (cache-pool/get-obj cache (:shape node))
+        return-fn #(cache-pool/return-obj cache (:shape node) t)]
+    (tensors/fill! factory t 0.0)
+    (-> node
+        (assoc key t)
+        (with-meta (merge (meta node) {[::return key] return-fn})))))
+
+(defn release-tensor! [node key]  
+  (when-let [return-fn (-> node meta (get [::return key]))]
+    (return-fn))
+  (dissoc node key))
 
 (defn with-tensors [node factory model]
   (case (:type node)
@@ -92,6 +101,16 @@
     :params (model/canonical-node model (:ref-name node))
     ;; new values + grad
     :op (-> node (ensure-tensor! :value factory) (ensure-tensor! :grad factory))))
+
+(defn with-release-tensors [node]
+  (case (:type node)
+    ;; must create a new vlaue
+    :input (release-tensor! node :value)
+    :constant (throw (ex-info "Not Supported"))
+    ;; new values + grad
+    :op (-> node (release-tensor! :value) (release-tensor! :grad))
+    :params nil)
+  node)
 
 (defn with-tensor-op [node factory]
   (if (= (:type node) :op)
@@ -157,11 +176,12 @@
 
 (defn backward-pass-walk
   [node]
-  (if-not (= :op (:type node))
-    node
-    (let [tensor-op (p/safe-get node :tensor-op)]
-      (p/safe-get node :grad)
-      (backward-node-pass! tensor-op node))))
+  (with-release-tensors
+    (if-not (= :op (:type node))
+      node
+      (let [tensor-op (p/safe-get node :tensor-op)]
+        (p/safe-get node :grad)
+        (backward-node-pass! tensor-op node)))))
 
 (s/defn backward-pass!
   "backward-pass through all the parameter nodes associated with

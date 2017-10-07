@@ -2,7 +2,9 @@
   (:import [java.util HashMap Map])
   (:require [schema.core :as s]
             [tensors.core :as tensors]
-            [tensors.computation-graph :as cg]))
+            [tensors.computation-graph :as cg]
+            [tensors.cache-pool :as cache-pool]
+            [tensors.model :as model]))
 
 (s/defschema InitParamSpec
   "Spec for how to generate parameter entries independently
@@ -57,9 +59,16 @@
 (s/defn simple-param-collection :- PModel
   "Simple collection of parameters
    NOTE: The meta-data of the param-collection gives you access
-   to the underlying data. Don't use it except for an emergency!"
+   to the underlying data. Don't use it except for an emergency!
+
+  The factory is also adorned with a caching pool under the
+  :cache meta-data "
   [factory :- tensors/PFactory]
-  (let [m (java.util.HashMap.)]
+  (let [m (java.util.HashMap.)
+        mk-tensor (fn [shape]
+                    #_(println "Cache miss on " shape)
+                    (tensors/zeros factory shape))
+        factory (with-meta factory {:cache (cache-pool/make 100 mk-tensor)})]
     (with-meta
       (reify
 
