@@ -13,7 +13,6 @@
 
 (s/defschema CompiledNode
   (assoc cg/Node
-         :factory tensors/PFactory
          :value s/Any
          :grad s/Any))
 
@@ -78,17 +77,21 @@
     (ensure-valid?! tensor-op arg-nodes)
     tensor-op))
 
+(defn ensure-tensor! [node key factory]
+  (if-let [v (get node key)]
+    (do (tensors/fill! factory v 0.0)
+        node)
+    (assoc node key (tensors/zeros factory (:shape node)))))
+
 (defn with-tensors [node factory model]
   (case (:type node)
-    ;; don't need a gradient for inputs
-    :input  (assoc node :value (tensors/zeros factory (:shape node)))
-    :constant (if-not (:value  node)
-                (assoc node (tensors/zeros factory (:shape node)))
-                node)
+    ;; must create a new vlaue
+    :input (ensure-tensor! node :value factory)
+    :constant (throw (ex-info "Not Supported"))
+    ;; re-use the model values
     :params (model/canonical-node model (:ref-name node))
-    :op     (assoc node
-                   :value (tensors/zeros factory (:shape node))
-                   :grad (tensors/zeros factory (:shape node)))))
+    ;; new values + grad
+    :op (-> node (ensure-tensor! :value factory) (ensure-tensor! :grad factory))))
 
 (defn with-tensor-op [node factory]
   (if (= (:type node) :op)
@@ -117,7 +120,6 @@
 
 (defn -compile-hack [node factory input->vals model]
   (let [node  (-> node
-                  (assoc :factory factory)
                   (with-tensors factory model)
                   (with-tensor-op factory))]
     (when (= :input (p/safe-get node :type))
@@ -133,7 +135,7 @@
   (let [provided-keys (set (keys input->vals))
         nodes (graph/post-order-nodes target)
         factory (model/tensor-factory model)
-        input->node (p/for-map [n nodes :when (= :input(:type n))]
+        input->node (p/for-map [n nodes :when (= :input (:type n))]
                                (:ref-name n) n)
         existing-keys (set (keys input->vals))]
     ;; Ensure provided expected input values
@@ -158,6 +160,7 @@
   (if-not (= :op (:type node))
     node
     (let [tensor-op (p/safe-get node :tensor-op)]
+      (p/safe-get node :grad)
       (backward-node-pass! tensor-op node))))
 
 (s/defn backward-pass!

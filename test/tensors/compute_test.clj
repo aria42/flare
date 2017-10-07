@@ -18,9 +18,9 @@
           input-vals {"X" [[1 2] [2 1]] "Y" [[1 2] [1 1]]}]
       (let [Z (forward-pass! Z model input-vals)]
         (is (= [[2.0 4.0] [3.0 2.0]]
-               (tensors/->clj (:factory Z) (:value Z))))
+               (tensors/->clj factory (:value Z))))
         (is (= [[0.0 0.0] [0.0 0.0]]
-               (tensors/->clj (:factory Z) (:grad Z)))))))
+               (tensors/->clj factory (:grad Z)))))))
   (testing "lr graph"
     (let [num-classes 2
           num-feats 3
