@@ -82,12 +82,13 @@
   (let [cache (-> factory meta :cache)
         t (cache-pool/get-obj cache (:shape node))
         return-fn #(cache-pool/return-obj cache (:shape node) t)]
-    (tensors/fill! factory t 0.0)
+    (when (= key :grad)
+      (tensors/fill! factory t 0.0))
     (-> node
         (assoc key t)
         (with-meta (merge (meta node) {[::return key] return-fn})))))
 
-(defn release-tensor! [node key]  
+(defn release-tensor! [node key]
   (when-let [return-fn (-> node meta (get [::return key]))]
     (return-fn))
   (dissoc node key))

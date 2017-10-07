@@ -336,6 +336,16 @@
     ;; else
     (throw (ex-info "Unallowed shape" {:shape (vec shape)}))))
 
+(defonce *cached-zeros (atom {}))
+
+(defn zero-fill [factory t]
+  (let [shape (tensors/shape factory t)]
+    (if-let [cached (get @*cached-zeros shape)]
+      (copy! cached t)
+      (let [z (tensors/zeros factory shape)]
+        (swap! *cached-zeros assoc shape z)
+        (copy! z t)))))
+
 (defrecord Factory []
   tensors/PFactory
   (get-op [this op-key]
@@ -349,21 +359,23 @@
           fixed-return (double (if constant? get-val-fn 0.0))
           dims (long-array (if (vctr? tensor) 1 2))
           get-val-fn ^clojure.lang.IFn$ODD get-val-fn]
-      (alter! tensor
-              (case [constant? (vctr? tensor)]
-                [true true]
-                (fn fill!-tt ^double [^long i ^double x] fixed-return)
-                [false true]
-                (fn fill!-ft ^double [^long i ^double x]
-                  (aset dims (int 0) i)
-                  (.invokePrim get-val-fn dims x))
-                [true false]
-                (fn fill!-tf ^double [^long i ^long j ^double x] fixed-return)
-                [false false]
-                (fn fill!-ff ^double [^long i ^long j ^double x]
-                  (aset dims (int 0) i)
-                  (aset dims (int 1) j)
-                  (.invokePrim get-val-fn dims x))))))
+      (if (and constant? (zero? fixed-return))
+        (zero-fill this tensor)
+        (alter! tensor
+                (case [constant? (vctr? tensor)]
+                  [true true]
+                  (fn fill!-tt ^double [^long i ^double x] fixed-return)
+                  [false true]
+                  (fn fill!-ft ^double [^long i ^double x]
+                    (aset dims (int 0) i)
+                    (.invokePrim get-val-fn dims x))
+                  [true false]
+                  (fn fill!-tf ^double [^long i ^long j ^double x] fixed-return)
+                  [false false]
+                  (fn fill!-ff ^double [^long i ^long j ^double x]
+                    (aset dims (int 0) i)
+                    (aset dims (int 1) j)
+                    (.invokePrim get-val-fn dims x)))))))
   (shape [this t]
     (if (vctr? t)
       [(dim t)]

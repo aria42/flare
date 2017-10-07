@@ -24,7 +24,7 @@
             class-idx (.nextInt r (int num-classes))
             activations (axpy (mv W f) b)
             label (imax activations)]
-        {"f" rand-feats "label" [label]}))))
+        {"f" f "label" (dv [label])}))))
 
 (defn lr-loss [m num-classes num-feats]
   (let [feat-vec (cg/input "f" [num-feats])
