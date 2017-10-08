@@ -48,7 +48,7 @@
 
 (s/defn build-seq
   [cell :- RNNCell inputs]
-  (let [factory (cell-model cell)
+  (let [factory (-> cell cell-model model/tensor-factory)
         out-dim (output-dim cell)
         zero  (tensors/zeros factory [out-dim])
         init-output (cg/constant "h0" [out-dim] zero)

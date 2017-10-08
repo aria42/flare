@@ -1,5 +1,6 @@
 (ns tensors.core
-  (:require [schema.core :as s])
+  (:require [schema.core :as s]
+            [tensors.node :as node])
   (:import [java.util Random]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

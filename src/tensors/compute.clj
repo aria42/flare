@@ -91,7 +91,7 @@
   (key-case (.type node)
     ;; must create a new vlaue
     :input (ensure-tensor! node :value factory)
-    :constant (throw (ex-info "Not Supported"))
+    :constant node
     ;; re-use the model values
     :params (model/canonical-node model (.ref-name node))
     ;; new values + grad
@@ -101,7 +101,7 @@
   (key-case (.type node)
     ;; must create a new vlaue
     :input (release-tensor! node :value)
-    :constant (throw (ex-info "Not Supported"))
+    :constant node
     ;; new values + grad
     :op (-> node (release-tensor! :value) (release-tensor! :grad))
     :params nil)

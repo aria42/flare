@@ -53,16 +53,13 @@
    (input (name (gensym "input")) shape)))
 
 (s/defn constant
-  "Create input variable node, using provided input-name
-   or generating one if one isn't provided"
-  [input-name :- String shape :- tensors/Shape value :- s/Any]
+  "Create constant variable, must be aware of the tensor factory"
+  [input-name :- String factory :- tensors/PFactory tensor :- s/Any]
   (node/map->Node
    {:type :constant
-    :shape shape
-    :value value
-    :ref-name (full-node-name input-name)})
-  ([shape :- tensors/Shape value :- s/Any]
-   (constant (name (gensym "constant")) shape value)))
+    :shape (tensors/shape factory tensor)
+    :value tensor
+    :ref-name (full-node-name input-name)}))
 
 (defmacro definput [input-var shape]
   `(def ~input-var (input ~(name input-var) ~shape)))

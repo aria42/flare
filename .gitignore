@@ -1,5 +1,6 @@
 /target
 /classes
+/data
 /checkouts
 pom.xml
 pom.xml.asc
