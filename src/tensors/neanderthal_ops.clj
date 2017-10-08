@@ -68,9 +68,11 @@
     ;; dX/dt[m,k] = dZ/dt[m,n] Y^T [n, k]
     (let [^Node node node
           dZ (.grad node)
-          cs (.children node)
-          [X Y] (map #(.value ^Node %) cs)
-          [dX dY] (map #(.grad ^Node %) cs)]
+          [^Node nX ^Node nY] (.children node)
+          X (.value nX)
+          Y (.value nY)
+          dX (.grad nX)
+          dY (.grad nY)]
       ;; update dX
       (when dX
         (if (matrix? Y)
@@ -190,7 +192,7 @@
       (assoc node ::probs (dv len))))
   (forward-node-pass! [this node]
     (let [^Node node node
-          [^Node activations-node ^Node label-node] (:children node)
+          [^Node activations-node ^Node label-node] (.children node)
           activations (.value activations-node)
           probs (soft-max! activations (p/safe-get node ::probs))
           label (-> label-node .value (entry 0) long)

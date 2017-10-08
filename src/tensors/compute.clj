@@ -59,15 +59,19 @@
     (ensure-valid?! tensor-op arg-nodes)
     tensor-op))
 
+(defmacro key-case [k & clauses]
+  `(cond
+     ~@(mapcat (fn [[ok# v#]] (list (list 'identical? k ok#) v#))
+               (partition 2 clauses))
+     :else (throw (ex-info "No matching keyword" {:key ~k}))))
+
 (defn return-key [key]
-  (cond (identical? key :value) ::return-value
-        (identical? key :grad) ::return-grad
-        :else (throw (ex-info "Bad key" {:key key}))))
+  (key-case key :value ::return-value :grad ::return-grad))
 
 (defn ensure-tensor! [^Node node key factory]
   (let [cache (-> factory meta :cache)
-        t (cache-pool/get-obj cache (.shape node))
-        return-fn #(cache-pool/return-obj cache (.shape node) t)]
+        [t return-fn] (cache-pool/get-obj cache (.shape node))
+        return-fn #(return-fn t)]
     (when (identical? key :grad)
       (tensors/fill! factory t 0.0))
     (-> node
@@ -82,7 +86,7 @@
   (assoc node key nil))
 
 (defn with-tensors [^Node node factory model]
-  (case (.type node)
+  (key-case (.type node)
     ;; must create a new vlaue
     :input (ensure-tensor! node :value factory)
     :constant (throw (ex-info "Not Supported"))
@@ -92,7 +96,7 @@
     :op (-> node (ensure-tensor! :value factory) (ensure-tensor! :grad factory))))
 
 (defn with-release-tensors [^Node node]
-  (case (.type node)
+  (key-case (.type node)
     ;; must create a new vlaue
     :input (release-tensor! node :value)
     :constant (throw (ex-info "Not Supported"))
@@ -118,20 +122,20 @@
         (tensors/copy-from-input! factory (.value node) vals)))
     node))
 
+(defn validate-input-keys [nodes ^java.util.Map input->vals]
+  (let [provided (.keySet input->vals)]
+    (doseq [^Node n nodes  :when (identical? :input (.type n))]
+      (when-not (.contains provided (.ref-name n))
+        (throw (ex-info "Missing required key" {:key (.ref-name n)}))))))
+
 (defn forward-pass!
   "forward-pass will topographic walk through graph writing to `:value`
   key on all compiled nodes. You can then look up and retrieve the tensors
   associated with any node"
   [^Node target model input->vals]
-  (let [provided-keys (set (keys input->vals))
-        nodes (graph/post-order-nodes target)
-        factory (model/tensor-factory model)
-        input->node (p/for-map [^Node n nodes :when (identical? :input (.type n))]
-                               (.ref-name n) n)
-        existing-keys (set (keys input->vals))]
-    ;; Ensure provided expected input values
-    (when-let [missing (seq (set/difference existing-keys provided-keys))]
-      (throw (ex-info "Missing input needed" {:missing missing})))
+  (let [nodes (graph/post-order-nodes target)
+        factory (model/tensor-factory model)]
+    (validate-input-keys nodes input->vals)
     ;; Copy input values to node tensors
     (graph/bottom-up-walk
      target
