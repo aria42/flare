@@ -61,19 +61,21 @@
 
 (defmacro key-case [k & clauses]
   `(cond
-     ~@(mapcat (fn [[ok# v#]] (list (list 'identical? k ok#) v#))
+     ~@(mapcat (fn [[ok# v#]] (list (list 'clojure.lang.Util/identical k ok#) v#))
                (partition 2 clauses))
      :else (throw (ex-info "No matching keyword" {:key ~k}))))
 
 (defn return-key [key]
   (key-case key :value ::return-value :grad ::return-grad))
 
+(def +zero+ (Double. 0.0))
+
 (defn ensure-tensor! [^Node node key factory]
   (let [cache (-> factory meta :cache)
         [t return-fn] (cache-pool/get-obj cache (.shape node))
         return-fn #(return-fn t)]
     (when (identical? key :grad)
-      (tensors/fill! factory t 0.0))
+      (tensors/fill! factory t +zero+))
     (-> node
         (assoc key t)
         (with-meta (assoc (meta node) (return-key key) return-fn)))))
