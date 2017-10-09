@@ -35,12 +35,20 @@
 (s/defn add-graph-op
   [op :- GraphOp  nodes]
   (op-validate! op nodes)
-  (node/map->Node
-   {:type :op
-    :shape (forward-shape op nodes)
-    :graph-op op
-    :ref-name (node/scoped-name (gensym (str (name (op-key op)) ":")))
-    :children nodes}))
+  ;; Bottleneck so using java constructor
+  (Node.
+   :op
+   (forward-shape op nodes)
+   (node/scoped-name (node/gen-name (name (op-key op))))
+   ;; value
+   nil
+   ;; grad
+   nil
+   op
+   ;; tensor-op
+   nil
+   ;; children
+   nodes))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Display/Summarize Graphs
@@ -77,6 +85,8 @@
       (format "input(%s, %s)" (:ref-name target) (:shape target))
       :params
       (format "param(%s, %s)" (:ref-name target) (:shape target))
+      :constant
+      (format "constant(%s, %s) " (:ref-name target) (:shape target))
       ;; else
       (throw (ex-info "Bad node to summarize" {:node target})))))
   ([target] (summarize-computation target 0)))

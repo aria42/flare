@@ -1,7 +1,8 @@
 (ns tensors.node
   (:require [clojure.string :as str]
             [schema.core :as s]
-            [tensors.core :as tensors]))
+            [tensors.core :as tensors]
+            [tensors.node :as node]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Graph Datastructure
@@ -17,7 +18,12 @@
 (defn ^String scoped-name
   "fully qualified node name with scopes"
   [^String node-name]
-  (str/join "/" (conj *current-input-scope* node-name)))
+  (let [sb (StringBuilder.)]
+    (doseq [x *current-input-scope*]
+      (.append sb ^String x)
+      (.append sb "/"))
+    (.append sb node-name)
+    (.toString sb)))
 
 (defmacro with-scope [^String scope-name & body]
   `(binding [*current-input-scope*
@@ -41,15 +47,21 @@
 (s/defn constant :- Node
   "Create constant variable with provided tensor. Unfortunately also
    need to provide shape since tensor data isn't aware of intended shape "
-  [input-name :- String shape :- tensors/PFactory tensor :- s/Any]
-  (map->Node
-   {:type :constant
-    :shape shape
-    :value tensor
-    :ref-name (scoped-name input-name)}))
+  ([input-name :- String shape :- tensors/PFactory tensor :- s/Any]
+   (map->Node
+    {:type :constant
+     :shape shape
+     :value tensor
+     :ref-name (scoped-name input-name)}))
+  ([shape :- tensors/PFactory tensor :- s/Any]
+   (constant (name (gensym "input")) shape tensor)))
 
 (defmacro definput [input-var shape]
   `(def ~input-var (input ~(name input-var) ~shape)))
 
 (defmacro defparams [params-var shape]
   `(def ~params-var (params ~(name params-var) ~shape)))
+
+(let [idx (java.util.concurrent.atomic.AtomicInteger.)]
+  (defn gen-name [^String prefix]
+    (str prefix ":" (.getAndIncrement idx))))

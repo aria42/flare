@@ -30,6 +30,7 @@
           trans-fn (comp cg/tanh (affine "trans"))]
       (reify RNNCell
         (cell-model [this] m)
+        (output-dim [this] hidden-dim)
         (add-input! [this input last-output last-state]
          (tensors/validate-shape! :lstm-input [input-dim] (:shape input))
          (tensors/validate-shape! :lstm-hidden [hidden-dim] (:shape last-output))
