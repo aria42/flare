@@ -39,7 +39,7 @@
    {:type :op
     :shape (forward-shape op nodes)
     :graph-op op
-    :ref-name (full-node-name (gensym (str (name (op-key op)) ":")))
+    :ref-name (node/scoped-name (gensym (str (name (op-key op)) ":")))
     :children nodes}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

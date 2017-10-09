@@ -1,5 +1,5 @@
 (ns tensors.computation-graph-test
-  (:refer-clojure :exclude [+ *])
+  (:refer-clojure :exclude [+ * concat])
   (:require [clojure.test :refer :all]
             [tensors.computation-graph :refer :all]
             [tensors.core :as tensors]
@@ -7,9 +7,9 @@
 
 (deftest scope-test
   (testing "nested scope"
-    (with-scope :affine
-      (with-scope :logistic
-        (let [Y (input "Y" [10 1])]
+    (node/with-scope :affine
+      (node/with-scope :logistic
+        (let [Y (node/input "Y" [10 1])]
           (are [x y] (= x y)
             "affine/logistic/Y" (:ref-name Y)))))))
 

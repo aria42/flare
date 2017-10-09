@@ -7,12 +7,12 @@
             [tensors.compute :as compute]
             [tensors.core :as tensors]
             [tensors.model :as model]
-            [tensors.graph-ops :as go]
             [tensors.train :as train]
             [tensors.computation-graph :as cg]
             [uncomplicate.neanderthal.native :refer :all]
             [uncomplicate.neanderthal.core :refer :all]
-            [clojure.tools.cli :refer [parse-opts]]))
+            [clojure.tools.cli :refer [parse-opts]]
+            [tensors.node :as node]))
 
 (defn generate-data [num-datums num-classes num-feats]
   (let [r (java.util.Random. 0)
@@ -29,10 +29,10 @@
         {"f" f "label" (dv [label])}))))
 
 (defn lr-loss [m num-classes num-feats]
-  (let [feat-vec (cg/input "f" [num-feats])
-        activations (go/affine m feat-vec num-classes)
-        label (cg/input "label" [1])]
-    (go/cross-entropy-loss activations label)))
+  (let [feat-vec (node/input "f" [num-feats])
+        activations (cg/affine m feat-vec num-classes)
+        label (node/input "label" [1])]
+    (cg/cross-entropy-loss activations label)))
 
 (defn train [{:keys [engine, num-examples, num-iters, num-feats, num-batch] :as opts}]
   (println "options " opts)

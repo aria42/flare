@@ -2,17 +2,17 @@
   (:require [tensors.compute :refer :all]
             [tensors.computation-graph :as cg]
             [tensors.core :as tensors]
-            [tensors.graph-ops :as go]
             [tensors.neanderthal-ops :as no]
+            [tensors.node :as node]
             [tensors.model :as model]
             [uncomplicate.neanderthal.core :refer :all]
             [clojure.test :refer :all]))
 
 (deftest compile-forward-test
   (testing "simple graph"
-    (let [X (cg/input "X" [2 2])
-          Y (cg/input "Y" [2 2])
-          Z (go/+ X Y)
+    (let [X (node/input "X" [2 2])
+          Y (node/input "Y" [2 2])
+          Z (cg/+ X Y)
           factory (no/->Factory)
           model (model/simple-param-collection factory)
           input-vals {"X" [[1 2] [2 1]] "Y" [[1 2] [1 1]]}]
@@ -28,11 +28,11 @@
           m (model/simple-param-collection factory)
           W (model/add-params! m [num-classes num-feats] :name "W")
           b (model/add-params! m [num-classes] :name "b")
-          feat-vec (go/strech (cg/input "f" [num-feats]) 1)
-          activations (go/squeeze (go/+ (go/* W feat-vec) (go/strech b 1)) 1)
+          feat-vec (cg/strech (node/input "f" [num-feats]) 1)
+          activations (cg/squeeze (cg/+ (cg/* W feat-vec) (cg/strech b 1)) 1)
           ;; keep 1 as the "correct" label
-          label (cg/input "label" [1])
-          loss (go/cross-entropy-loss activations label)]
+          label (node/input "label" [1])
+          loss (cg/cross-entropy-loss activations label)]
       (let [input->vals {"f" [1 2 1] "label" [0]}
             one-grad (tensors/from-nums factory [1.0])
             loss (-> loss

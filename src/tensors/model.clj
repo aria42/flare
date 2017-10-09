@@ -2,7 +2,6 @@
   (:import [java.util HashMap Map])
   (:require [schema.core :as s]
             [tensors.core :as tensors]
-            [tensors.computation-graph :as cg]
             [tensors.cache-pool :as cache-pool]
             [tensors.model :as model]
             [tensors.node :as node]))
@@ -70,7 +69,7 @@
         PModel
         (tensor-factory [this] factory)
         (-add-params! [this param-name shape init-spec]
-          (let [param-name (cg/full-node-name param-name)]
+          (let [param-name (node/scoped-name param-name)]
             (when-let [existing (.get m param-name)]
               (throw (ex-info "Existing param key" {:existing existing})))
             (let [node (node/map->Node

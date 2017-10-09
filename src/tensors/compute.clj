@@ -5,7 +5,6 @@
             [plumbing.core :as p]
             [schema.core :as s]
             [clojure.set :as set]
-            [tensors.graph-ops :as go]
             [tensors.model :as model]
             [tensors.cache-pool :as cache-pool])
   (:import [tensors.node Node]))

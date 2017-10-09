@@ -14,7 +14,7 @@
 
 (def ^:dynamic *current-input-scope* [])
 
-(defn ^String full-node-name
+(defn ^String scoped-name
   "fully qualified node name with scopes"
   [^String node-name]
   (str/join "/" (conj *current-input-scope* node-name)))
@@ -34,7 +34,7 @@
    (map->Node
     {:type :input
      :shape shape
-     :ref-name (full-node-name input-name)}))
+     :ref-name (scoped-name input-name)}))
   ([shape :- tensors/Shape]
    (input (name (gensym "input")) shape)))
 
@@ -46,7 +46,7 @@
    {:type :constant
     :shape shape
     :value tensor
-    :ref-name (full-node-name input-name)}))
+    :ref-name (scoped-name input-name)}))
 
 (defmacro definput [input-var shape]
   `(def ~input-var (input ~(name input-var) ~shape)))
