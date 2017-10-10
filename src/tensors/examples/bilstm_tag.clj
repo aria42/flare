@@ -28,18 +28,19 @@
      (-> opts :file io/reader embeddings/read-text-embedding-pairs))))
 
 (comment
-  (def opts {:file "data/small-glove.50d.txt" :lstm-size 10 :emb-size 50})
-  (def factory (no/->Factory))
-  (def emb (load-embeddings opts))
-  (def model (model/simple-param-collection factory))
-  (def cell (rnn/lstm-cell model (:emb-size opts) (:lstm-size opts)))
-  (def sent-words (gen-sentence 10))
-  (def sent-nodes (mapv (fn [w]
-                          (node/constant
-                           [(:emb-size opts)]
-                           (embeddings/lookup emb w)))
-                        sent-words))
-  (def hiddens (rnn/build-seq cell sent-nodes)))
+  (do 
+    (def opts {:file "data/small-glove.50d.txt" :lstm-size 10 :emb-size 50})
+    (def factory (no/->Factory))
+    (def emb (load-embeddings opts))
+    (def model (model/simple-param-collection factory))
+    (def cell (rnn/lstm-cell model (:emb-size opts) (:lstm-size opts)))
+    (def sent-words (gen-sentence 5))
+    (def sent-nodes (mapv (fn [w]
+                            (node/constant
+                             [(:emb-size opts)]
+                             (embeddings/lookup emb w)))
+                          sent-words))
+    (def hiddens (rnn/build-seq cell sent-nodes))))
 
 (defn run [opts]
   (let [factory (no/->Factory)

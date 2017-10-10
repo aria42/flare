@@ -129,33 +129,45 @@
       (when-not (.contains provided (.ref-name n))
         (throw (ex-info "Missing required key" {:key (.ref-name n)}))))))
 
+(defn -forward-intrnal [^Node node]
+  (if-not (seq (.children node))
+    ;; leaf node has no computation
+    node
+    ;; op node, fetch tensor-op
+    ;; execute forward computation
+    (let [tensor-op (.tensor-op node)
+          forward-node (forward-node-pass! tensor-op node)]
+      forward-node)))
+
 (defn forward-pass!
   "forward-pass will topographic walk through graph writing to `:value`
   key on all compiled nodes. You can then look up and retrieve the tensors
   associated with any node"
-  [^Node target model input->vals]
-  (let [nodes (graph/post-order-nodes target)
-        factory (model/tensor-factory model)]
-    (validate-input-keys nodes input->vals)
-    ;; Copy input values to node tensors
-    (graph/bottom-up-walk
-     target
-     (fn walk-fn [^Node node]
-       (let [^Node node (-compile-hack node factory input->vals model)]
-         (if-not (seq (.children node))
-           ;; leaf node has no computation
-           node
-           ;; op node, fetch tensor-op
-           ;; execute forward computation
-           (let [tensor-op (.tensor-op node)]
-             (forward-node-pass! tensor-op node))))))))
+  ([^Node target model] (forward-pass! target model {}))
+  ([^Node target model input->vals]
+   (let [nodes (graph/post-order-nodes target)
+         factory (model/tensor-factory model)
+         computed-nodes (java.util.HashMap. (count nodes))]
+     (validate-input-keys nodes input->vals)
+     ;; Copy input values to node tensors
+     (graph/bottom-up-walk
+      target
+      (fn walk-fn [^Node node]
+        (if-let [computed (.get computed-nodes (.ref-name node))]
+          computed
+          (let [^Node node (-compile-hack node factory input->vals model)
+                ^Node node (-forward-intrnal node)]
+            (.put computed-nodes (.ref-name node) node)
+            node)))))))
 
 (defn backward-pass-walk
   [^Node node]
   (with-release-tensors
     (if-not (identical? :op (.type node))
       node
-      (backward-node-pass! (.tensor-op node) node))))
+      (do
+        #_(println [(:ref-name node) (map :ref-name (:children node))])
+        (backward-node-pass! (.tensor-op node) node)))))
 
 (defn backward-pass!
   "backward-pass through all the parameter nodes associated with

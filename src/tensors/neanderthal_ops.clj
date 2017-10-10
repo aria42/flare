@@ -48,7 +48,8 @@
 (defrecord MultTensorOp []
   compute/TensorOp
   (ensure-valid?! [this input-nodes]
-    (doseq [^Node n input-nodes] (ensure-valid-shape?! (.shape n)))
+    (doseq [^Node n input-nodes]
+      (ensure-valid-shape?! (.shape n)))
     (when-not (= 2 (count input-nodes))
       (throw (ex-info "Must have two arguments to MultTensorOp"))))
   (prep [this node]
@@ -240,7 +241,8 @@
   (forward-node-pass! [this node]
     (let [output (p/safe-get node :value)
           [X Y] (map :value (:children node))]
-      (hadamard output X Y)))
+      (hadamard output X Y)
+      node))
   (backward-node-pass! [this node]
     (let [dZ (p/safe-get node :grad)
           Z (p/safe-get node :value)
@@ -249,18 +251,20 @@
       (when dX
         (hadamard dX Y dZ))
       (when dY
-        (hadamard dY X dZ)))))
+        (hadamard dY X dZ)))
+    node))
 
-(defrecord ConcatTensorOp [dim-to-cat]
+(defrecord ConcatTensorOp []
   compute/TensorOp
   (ensure-valid?! [this inputs]
     (doseq [x inputs]
-      (ensure-valid-shape?! x))
+      (ensure-valid-shape?! (:shape x)))
     true)
   (prep [this node] node)
   (forward-node-pass! [this node]
     (let [output (p/safe-get node :value)
-          inputs (:children node)]
+          inputs (:children node)
+          dim-to-cat (:dim-to-cat (:graph-op node))]
       (loop [inputs inputs offset 0]
         (when-let [input (first inputs)]
           (let [len (long (nth (:shape input) dim-to-cat))
@@ -271,21 +275,25 @@
               (if (= dim-to-cat 0)
                 (copy! x (submatrix output offset 0 len nc))
                 (copy! x (submatrix output 0 offset nr len))))
-            (recur (next inputs) (+ offset len)))))))
+            (recur (next inputs) (+ offset len))))))
+    node)
   (backward-node-pass! [this node]
     (let [output (p/safe-get node :grad)
-          inputs (:children node)]
+          inputs (:children node)
+          dim-to-cat (:dim-to-cat (:graph-op node))]
       (loop [inputs inputs offset 0]
         (when-let [input (first inputs)]
           (let [len (long (nth (:shape input) dim-to-cat))
                 x (:grad input)
                 [nr nc] (:shape input)]
-            (if (vctr? x)
-              (copy! (subvector output offset len) x)
-              (if (= dim-to-cat 0)
-                (copy! (submatrix output offset 0 len nc) x)
-                (copy! (submatrix output 0 offset nr len) x)))
-            (recur (next inputs) (+ offset len))))))))
+            (when x
+              (if (vctr? x)
+                (copy! (subvector output offset len) x)
+                (if (= dim-to-cat 0)
+                  (copy! (submatrix output offset 0 len nc) x)
+                  (copy! (submatrix output 0 offset nr len) x))))
+            (recur (next inputs) (+ offset len)))))
+      node)))
 
 (defrecord ElementwiseTransformOp
   [^clojure.lang.IFn$DD fx ^clojure.lang.IFn$DD dfx]
@@ -298,7 +306,8 @@
     (let [output (p/safe-get node :value)
           X (-> node :children first :value)]
       (alter! output (fn ^double [^long i ^double _]
-                       (.invokePrim fx (real/entry X i))))))
+                       (.invokePrim fx (real/entry X i))))
+      node))
   (backward-node-pass! [this node]
     (let [dO (p/safe-get node :grad)]
       (when-let [dX (-> node :children first :grad)]
@@ -309,7 +318,8 @@
                             (.invokePrim dfx (real/entry X i)))))
             (alter! dX (fn ^double [^long i ^long j ^double x]
                          (* (real/entry dO i j)
-                            (.invokePrim dfx (real/entry X i j)))))))))))
+                            (.invokePrim dfx (real/entry X i j))))))))
+      node)))
 
 (def ^:private +elementwise-op+
   ;; f(x) = e^x, df(x) = e^x

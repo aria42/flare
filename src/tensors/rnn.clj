@@ -41,8 +41,8 @@
                state (trans-fn x)
                ;; combine hadamard of forget past, keep present
                state (cg/+
-                           (cg/hadamard forgot-probs last-state)
-                           (cg/hadamard keep-probs state))
+                      (cg/hadamard forgot-probs last-state)
+                      (cg/hadamard keep-probs state))
                output (cg/hadamard out-probs (cg/tanh state))]
            [output state]))))))
 

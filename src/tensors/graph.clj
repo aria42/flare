@@ -22,14 +22,19 @@
 
 (defn post-order-nodes [target]
   (let [list (java.util.ArrayList.)
-        queue (java.util.LinkedList.)]
-    (.add queue target)
+        queue (java.util.LinkedList.)
+        seen? (java.util.IdentityHashMap.)
+        add-to-queue (fn [x]
+                       (when-not (.containsKey seen? x)
+                         (.add queue x)
+                         (.put seen? x 1)))]
+    (add-to-queue target)
     (loop []
       (if-let [n (.poll queue)]
         (do
           (.add list n)
           (doseq [c (:children n)]
-            (.add queue c))
+            (add-to-queue c))
           (recur))
         (reverse list)))))
 

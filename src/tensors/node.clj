@@ -47,7 +47,7 @@
 (s/defn constant :- Node
   "Create constant variable with provided tensor. Unfortunately also
    need to provide shape since tensor data isn't aware of intended shape "
-  ([input-name :- String shape :- tensors/PFactory tensor :- s/Any]
+  ([input-name :- String shape :- tensors/Shape tensor :- s/Any]
    (map->Node
     {:type :constant
      :shape shape

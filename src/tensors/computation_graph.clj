@@ -122,7 +122,7 @@
       (throw (ex-info "Need at least one input"
                       {:num-args (count input-nodes)})))
     (let [shapes (map :shape input-nodes)]
-      (when-let [bad (some (fn [s] (> (count s) 2)) shapes)]
+      (when-let [bad (some (fn [s] (or (nil? s) (> (count s) 2))) shapes)]
         (throw (ex-info "Only max 2d allowed" {:bad bad})))
       (when-not (every?
                  (fn [[[a b] [c d]]] (= b c))
