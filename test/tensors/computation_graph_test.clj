@@ -3,7 +3,8 @@
   (:require [clojure.test :refer :all]
             [tensors.computation-graph :refer :all]
             [tensors.core :as tensors]
-            [tensors.node :as node]))
+            [tensors.node :as node]
+            [tensors.model :as model]))
 
 (deftest scope-test
   (testing "nested scope"
@@ -46,13 +47,19 @@
       (is (= [5 5] (:shape (hadamard X Y))))
       (is (thrown? RuntimeException (hadamard X (node/input [5 1])))))))
 
+(defn dummy-node [name shape]
+  (node/map->Node
+   {:type :constant
+    :shape shape
+    :ref-name (node/scoped-name name)}))
+
 
 (deftest logistic-regression-test
   (testing "create logistic regression graph (make parameters inputs)"
     (let [num-classes 2
           num-feats 10
-          W (node/constant "W" [num-classes num-feats] nil)
-          b (node/constant "bias" [num-classes] nil)
+          W (dummy-node "W" [num-classes num-feats])
+          b (dummy-node "bias" [num-classes])
           feat-vec (node/input "f" [num-feats])
           activations (+ (* W feat-vec) b)
           label (node/input "label" [1])

@@ -52,8 +52,8 @@
   (let [factory (-> cell cell-model model/tensor-factory)
         out-dim (output-dim cell)
         zero  (tensors/zeros factory [out-dim])
-        init-output (node/constant "h0" [out-dim] zero)
-        init-state (node/constant "c0" [out-dim]  zero)]
+        init-output (node/constant "h0" factory zero)
+        init-state (node/constant "c0" factory  zero)]
     (loop [inputs inputs outputs (list init-output) states (list init-state)]
       (if-let [input (first inputs)]
         (let [last-output (first outputs)

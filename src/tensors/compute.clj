@@ -86,15 +86,18 @@
   ;; if you remove a base key
   (assoc node key nil))
 
-(defn with-tensors [^Node node factory model]
-  (key-case (.type node)
-    ;; must create a new vlaue
-    :input (ensure-tensor! node :value factory)
-    :constant node
-    ;; re-use the model values
-    :params (model/canonical-node model (.ref-name node))
-    ;; new values + grad
-    :op (-> node (ensure-tensor! :value factory) (ensure-tensor! :grad factory))))
+(defn with-tensors [^Node node model]
+  (let [factory (model/tensor-factory model)]
+    (key-case (.type node)
+              ;; must create a new vlaue
+              :input (ensure-tensor! node :value factory)
+              :constant node
+              ;; re-use the model values
+              :params (model/canonical-node model (.ref-name node))
+              ;; new values + grad
+              :op (-> node
+                      (ensure-tensor! :value factory)
+                      (ensure-tensor! :grad factory)))))
 
 (defn with-release-tensors [^Node node]
   (key-case (.type node)
@@ -115,7 +118,7 @@
 
 (defn -compile-hack [^Node node factory input->vals model]
   (let [^Node node  (-> node
-                        (with-tensors factory model)
+                        (with-tensors model)
                         (with-tensor-op factory))]
     (when (identical? :input (.type node))
       (let [vals (p/safe-get input->vals (.ref-name node))]
@@ -138,6 +141,33 @@
     (let [tensor-op (.tensor-op node)
           forward-node (forward-node-pass! tensor-op node)]
       forward-node)))
+
+(defn canonical-nodes [^Node node model]
+  (let [nodes (graph/post-order-nodes node)
+        nodes (p/distinct-by #(.ref-name ^Node %) nodes)]
+    (p/for-map [^Node n nodes]
+       (.ref-name n)
+       (with-tensors n model))))
+
+(defn forward-pass!2 [^Node node model]
+  (let [nodes (graph/post-order-nodes node)
+        nodes (p/distinct-by #(.ref-name ^Node %) nodes)
+        node-map (p/for-map [^Node n nodes]
+                    (.ref-name n)
+                    (with-tensors n model))
+        get-canonical (fn [^Node n] (node-map (.ref-name n)))
+        nodes (map get-canonical nodes)
+        factory (model/tensor-factory model)]
+    (doseq [^Node n nodes]
+      (when (identical? :op (.type n))
+        (let [n (get-canonical n)
+              cs (map get-canonical (:children n))
+              ^Node n (assoc n :children cs)
+              op-key (-> n .graph_op cg/op-key)
+              tensor-op  (tensors/get-op factory op-key)]
+          (ensure-valid?! tensor-op cs)
+          (forward-node-pass! tensor-op n))))
+    (graph/bottom-up-walk node get-canonical)))
 
 (defn forward-pass!
   "forward-pass will topographic walk through graph writing to `:value`

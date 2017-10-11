@@ -1,8 +1,7 @@
 (ns tensors.node
   (:require [clojure.string :as str]
             [schema.core :as s]
-            [tensors.core :as tensors]
-            [tensors.node :as node]))
+            [tensors.core :as tensors]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Graph Datastructure
@@ -45,16 +44,17 @@
    (input (name (gensym "input")) shape)))
 
 (s/defn constant :- Node
-  "Create constant variable with provided tensor. Unfortunately also
-   need to provide shape since tensor data isn't aware of intended shape "
-  ([input-name :- String shape :- tensors/Shape tensor :- s/Any]
-   (map->Node
-    {:type :constant
-     :shape shape
-     :value tensor
-     :ref-name (scoped-name input-name)}))
-  ([shape :- tensors/PFactory tensor :- s/Any]
-   (constant (name (gensym "input")) shape tensor)))
+  "Create constant variable with provided tensor and factory.
+  The tensor data needs to be able to used with tensors/from-nums"
+  ([input-name :- String factory :- tensors/PFactory tensor-like :- s/Any]
+   (let [t (tensors/from-nums factory tensor-like)]
+     (map->Node
+      {:type :constant
+       :shape (tensors/shape factory t)
+       :value t
+       :ref-name (scoped-name input-name)})))
+  ([factory :- tensors/PFactory tensor-like :- s/Any]
+   (constant (name (gensym "input")) factory tensor-like)))
 
 (defmacro definput [input-var shape]
   `(def ~input-var (input ~(name input-var) ~shape)))

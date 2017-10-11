@@ -36,9 +36,7 @@
     (def cell (rnn/lstm-cell model (:emb-size opts) (:lstm-size opts)))
     (def sent-words (gen-sentence 5))
     (def sent-nodes (mapv (fn [w]
-                            (node/constant
-                             [(:emb-size opts)]
-                             (embeddings/lookup emb w)))
+                            (node/constant factory (embeddings/lookup emb w)))
                           sent-words))
     (def hiddens (rnn/build-seq cell sent-nodes))))
 
@@ -50,7 +48,7 @@
         sent-words (gen-sentence 10)
         sent-nodes (mapv (fn [w]
                            (node/constant
-                            [(:emb-size opts)]
+                            factory
                             (embeddings/lookup emb w)))
                          sent-words)
         hiddens (rnn/build-seq cell sent-nodes)]))

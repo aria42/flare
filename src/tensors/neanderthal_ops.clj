@@ -404,8 +404,9 @@
       [(dim t)]
       [(mrows t) (ncols t)]))
   (from-nums [this nums]
-    (let [shape (tensors/guess-shape nums)]
-      (-from-nums nums shape)))
+    (if (or (vctr? nums) (matrix? nums))
+      nums
+      (-from-nums nums (tensors/guess-shape nums))))
   (grad-step! [this weights alpha grad]
     (axpy! (- (double alpha)) grad weights))
   (copy-from-input! [this tensor! nums]
