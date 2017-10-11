@@ -1,12 +1,21 @@
 (ns tensors.embeddings
   (:require [schema.core :as s]
             [tensors.computation-graph :as cg]
-            [tensors.core :as tensors]))
+            [tensors.core :as tensors]
+            [tensors.node :as node]))
 
 (defprotocol Embedding
   (lookup [this obj])
   (vocab [this])
   (embedding-size [this]))
+
+(defn sent-nodes [factory emb sent]
+  (mapv (fn [word]
+          (node/constant
+           (node/gen-name "word")
+           factory
+           (lookup emb word)))
+        sent))
 
 (deftype FixedEmbedding [^java.util.Map m ^long emb-size]
   Embedding

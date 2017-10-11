@@ -6,7 +6,8 @@
             [clojure.java.io :as io]
             [clojure.tools.cli :refer [parse-opts]]
             [tensors.neanderthal-ops :as no]
-            [tensors.model :as model]))
+            [tensors.model :as model]
+            [tensors.computation-graph :as cg]))
 
 (defn build-graph [words embed rnn-cell])
 
@@ -28,6 +29,20 @@
      (:emb-size opts)
      (-> opts :file io/reader embeddings/read-text-embedding-pairs))))
 
+(defn graph-builder [model word-emb lstm-size]
+  (let [emb-size (embeddings/embedding-size word-emb)
+        cell (node/with-scope "forward"
+               (rnn/lstm-cell model emb-size lstm-size))
+        rev-cell (node/with-scope "reverse"
+                   (rnn/lstm-cell model emb-size lstm-size))
+        factory (model/tensor-factory model)]
+    (fn [sent tag]
+      (let [inputs (embeddings/sent-nodes factory word-emb sent)
+            [fwd-outputs _] (rnn/build-seq cell sent-nodes)
+            [rev-outputs _] (rnn/build-seq rev-cell (reverse sent-nodes))
+            concat-hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))]
+        concat-hidden))))
+
 (comment
   (do 
     (def opts {:file "data/small-glove.50d.txt" :lstm-size 10 :emb-size 50})
@@ -39,7 +54,9 @@
     (def sent-nodes (mapv (fn [w]
                             (node/constant factory (embeddings/lookup emb w)))
                           sent-words))
-    (def hiddens (rnn/build-seq cell sent-nodes))))
+    (def hiddens (rnn/build-seq cell sent-nodes))
+    (def gb (graph-builder model emb 10))
+    ))
 
 (defn run [opts]
   (let [factory (no/->Factory)
@@ -52,7 +69,8 @@
                             factory
                             (embeddings/lookup emb w)))
                          sent-words)
-        hiddens (rnn/build-seq cell sent-nodes)]))
+        hiddens (rnn/build-seq cell sent-nodes)
+        ]))
 
 (defn -main [& args]
   (let [parse (parse-opts args cli-options)]
