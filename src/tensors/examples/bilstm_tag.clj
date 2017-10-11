@@ -1,6 +1,7 @@
 (ns tensors.examples.bilstm-tag
   (:require [tensors.node :as node]
             [tensors.rnn :as rnn]
+            [tensors.compute :as compute]
             [tensors.embeddings :as embeddings]
             [clojure.java.io :as io]
             [clojure.tools.cli :refer [parse-opts]]

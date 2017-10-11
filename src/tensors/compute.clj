@@ -81,10 +81,7 @@
 
 (defn release-tensor! [node key]
   (when-let [return-fn (-> node meta (get (return-key key)))]
-    (return-fn))
-  ;; dissoc on record will convert to map
-  ;; if you remove a base key
-  (assoc node key nil))
+    (return-fn)))
 
 (defn with-tensors [^Node node model]
   (let [factory (model/tensor-factory model)]
@@ -98,16 +95,6 @@
               :op (-> node
                       (ensure-tensor! :value factory)
                       (ensure-tensor! :grad factory)))))
-
-(defn with-release-tensors [^Node node]
-  (key-case (.type node)
-    ;; must create a new vlaue
-    :input (release-tensor! node :value)
-    :constant node
-    ;; new values + grad
-    :op (-> node (release-tensor! :value) (release-tensor! :grad))
-    :params nil)
-  node)
 
 (defn with-tensor-op [^Node node factory]
   (if (identical? (.type node) :op)
@@ -168,9 +155,16 @@
    the graph computation, will write to `:grad` key for all nodes
    that have gradients (basically non-inputs) in graph"
   [target]
-  (let [nodes (reverse (graph/post-order-nodes target))
-;;        nodes (p/distinct-by #(.ref-name ^Node %) nodes)
-]
+  (let [nodes (reverse (graph/post-order-nodes target))]
     (doseq [^Node n nodes :when (identical? :op (.type n))]
       (backward-node-pass! (.tensor-op n) n))
-    (graph/bottom-up-walk target with-release-tensors)))
+    (doseq [^Node n nodes]
+      (key-case (.type n)
+                ;; must create a new vlaue
+                :input (release-tensor! n :value)
+                :constant nil
+                ;; new values + grad
+                :op (do
+                      (release-tensor! n :value)
+                      (release-tensor! n :grad))
+                :params nil))))
