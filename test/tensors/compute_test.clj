@@ -21,18 +21,6 @@
                (tensors/->clj factory (:value Z))))
         (is (= [[0.0 0.0] [0.0 0.0]]
                (tensors/->clj factory (:grad Z)))))))
-  #_(testing "simple graph (2)"
-    (let [factory (no/->Factory)
-          X (node/constant "X" factory [[1 2] [2 1]])
-          Y (node/input "Y" [2 2])
-          Z (cg/+ X Y)
-          model (model/simple-param-collection factory)
-          input-vals {"X" [[1 2] [2 1]] "Y" [[1 2] [1 1]]}]
-      (let [Z (forward-pass! Z model input-vals)]
-        (is (= [[2.0 3.0] [4.0 2.0]]
-               (tensors/->clj factory (:value Z))))
-        (is (= [[0.0 0.0] [0.0 0.0]]
-               (tensors/->clj factory (:grad Z)))))))
   (testing "lr graph"
     (let [num-classes 2
           num-feats 3
@@ -60,5 +48,19 @@
           (is (every? pos? right-row)))
         loss))
     )
-  )
+  (testing "repeated test"
+    (let [factory (no/->Factory)
+          model (model/simple-param-collection factory)
+          params-map (-> model meta :data)
+          ;; need to override value 
+          X (model/add-params! model [2])
+          Z (cg/+ X X)]
+      ;; hack to set values for params
+      (tensors/copy-from-input! factory
+         (:value (get params-map (:ref-name X)))
+         [2.0 2.0])
+      (let [Z (forward-pass! Z model)]
+        (is (= [4.0 4.0] (tensors/->clj factory (:value Z))))
+        (backward-pass! (assoc Z :grad (tensors/from-nums factory [1 1])))
+        (is (= [2.0 2.0] (tensors/->clj factory (:grad X))))))))
 

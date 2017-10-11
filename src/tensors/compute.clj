@@ -142,33 +142,6 @@
           forward-node (forward-node-pass! tensor-op node)]
       forward-node)))
 
-(defn canonical-nodes [^Node node model]
-  (let [nodes (graph/post-order-nodes node)
-        nodes (p/distinct-by #(.ref-name ^Node %) nodes)]
-    (p/for-map [^Node n nodes]
-       (.ref-name n)
-       (with-tensors n model))))
-
-(defn forward-pass!2 [^Node node model]
-  (let [nodes (graph/post-order-nodes node)
-        nodes (p/distinct-by #(.ref-name ^Node %) nodes)
-        node-map (p/for-map [^Node n nodes]
-                    (.ref-name n)
-                    (with-tensors n model))
-        get-canonical (fn [^Node n] (node-map (.ref-name n)))
-        nodes (map get-canonical nodes)
-        factory (model/tensor-factory model)]
-    (doseq [^Node n nodes]
-      (when (identical? :op (.type n))
-        (let [n (get-canonical n)
-              cs (map get-canonical (:children n))
-              ^Node n (assoc n :children cs)
-              op-key (-> n .graph_op cg/op-key)
-              tensor-op  (tensors/get-op factory op-key)]
-          (ensure-valid?! tensor-op cs)
-          (forward-node-pass! tensor-op n))))
-    (graph/bottom-up-walk node get-canonical)))
-
 (defn forward-pass!
   "forward-pass will topographic walk through graph writing to `:value`
   key on all compiled nodes. You can then look up and retrieve the tensors
@@ -190,18 +163,14 @@
             (.put computed-nodes (.ref-name node) node)
             node)))))))
 
-(defn backward-pass-walk
-  [^Node node]
-  (with-release-tensors
-    (if-not (identical? :op (.type node))
-      node
-      (do
-        #_(println [(:ref-name node) (map :ref-name (:children node))])
-        (backward-node-pass! (.tensor-op node) node)))))
-
 (defn backward-pass!
   "backward-pass through all the parameter nodes associated with
    the graph computation, will write to `:grad` key for all nodes
    that have gradients (basically non-inputs) in graph"
   [target]
-  (graph/top-down-walk target backward-pass-walk))
+  (let [nodes (reverse (graph/post-order-nodes target))
+;;        nodes (p/distinct-by #(.ref-name ^Node %) nodes)
+]
+    (doseq [^Node n nodes :when (identical? :op (.type n))]
+      (backward-node-pass! (.tensor-op n) n))
+    (graph/bottom-up-walk target with-release-tensors)))
