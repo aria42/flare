@@ -226,10 +226,10 @@
 
 (defn ^:static hadamard [out! x y]
   (if (vctr? x)
-    (alter! out! (fn ^double [^long i ^double _]
-                   (* (real/entry x i) (real/entry y i))))
-    (alter! out! (fn ^double [^long i ^long j ^double _]
-                   (* (real/entry x i j) (real/entry y i j))))))
+    (alter! out! (fn ^double [^long i ^double cur]
+                   (+ cur (* (real/entry x i) (real/entry y i)))))
+    (alter! out! (fn ^double [^long i ^long j ^double cur]
+                   (+ cur (* (real/entry x i j) (real/entry y i j)))))))
 
 (defrecord HadamardTensorOp []
   compute/TensorOp
@@ -288,10 +288,10 @@
                 [nr nc] (:shape input)]
             (when x
               (if (vctr? x)
-                (copy! (subvector output offset len) x)
+                (np/axpby! (subvector output offset len) x)
                 (if (= dim-to-cat 0)
-                  (copy! (submatrix output offset 0 len nc) x)
-                  (copy! (submatrix output 0 offset nr len) x))))
+                  (np/axpby! (submatrix output offset 0 len nc) x)
+                  (np/axpby! (submatrix output 0 offset nr len) x))))
             (recur (next inputs) (+ offset len)))))
       node)))
 
@@ -313,12 +313,14 @@
       (when-let [dX (-> node :children first :grad)]
         (let [X (p/safe-get node :value)]
           (if (vctr? dX)
-            (alter! dX (fn ^double [^long i ^double _]
-                         (* (real/entry dO i)
-                            (.invokePrim dfx (real/entry X i)))))
-            (alter! dX (fn ^double [^long i ^long j ^double x]
-                         (* (real/entry dO i j)
-                            (.invokePrim dfx (real/entry X i j))))))))
+            (alter! dX (fn ^double [^long i ^double cur]
+                         (+ cur
+                            (* (real/entry dO i)
+                               (.invokePrim dfx (real/entry X i))))))
+            (alter! dX (fn ^double [^long i ^long j ^double cur]
+                         (+ cur
+                            (* (real/entry dO i j)
+                               (.invokePrim dfx (real/entry X i j)))))))))
       node)))
 
 (def ^:private +elementwise-op+

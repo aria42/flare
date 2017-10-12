@@ -43,8 +43,9 @@
         m (model/simple-param-collection factory)
         loss (lr-loss m num-classes num-feats)
         data (doall (generate-data num-examples num-classes num-feats))
-        batch-gen #(partition num-batch data)]
-    (train/sgd! m loss batch-gen {:num-iters num-iters :learning-rate 0.01})))
+        batch-gen #(partition num-batch data)
+        train-opts {:num-iters num-iters :learning-rate 0.01}]
+    (train/static-graph-sgd! m loss batch-gen train-opts)))
 
 (def cli-options
   ;; An option with a required argument
@@ -65,6 +66,13 @@
    :default 100
     :parse-fn #(Integer/parseInt %)]
    ["-h" "--help"]])
+
+(do
+  (def opts {:engine :neanderthal
+             :num-examples 1000
+             :num-batch 32
+             :num-feats 10
+             :num-iters 100}))
 
 (defn -main [& args]
   (let [parse (parse-opts args cli-options)]

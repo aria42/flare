@@ -10,12 +10,10 @@
   (embedding-size [this]))
 
 (defn sent-nodes [factory emb sent]
-  (mapv (fn [word]
-          (node/constant
-           (node/gen-name "word")
-           factory
-           (lookup emb word)))
-        sent))
+  (for [word sent
+        :let [e (lookup emb word)]
+        :when e]
+    (node/constant (node/gen-name "word") factory e)))
 
 (deftype FixedEmbedding [^java.util.Map m ^long emb-size]
   Embedding

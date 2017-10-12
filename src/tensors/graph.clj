@@ -13,6 +13,23 @@
     (walk-fn (assoc node :children (mapv #(bottom-up-walk % walk-fn) cs)))
     (walk-fn node)))
 
+(defn topographic [node]
+  (let [marks (java.util.HashMap.)
+        ret (java.util.ArrayList.)
+        visit (fn visit [n]
+                (let [m (get marks (:ref-name n) :none)]
+                  (case m
+                    :permanent nil
+                    :temporary (throw (ex-info "Not a DAG"))
+                    :none (do
+                            (.put marks (:ref-name n) :temporary)
+                            (doseq [c (:children n)]
+                              (visit c))
+                            (.put marks (:ref-name n) :permanent)
+                            (.add ret n)))))]
+    (visit node)
+    ret))
+
 (defn top-down-walk [node walk-fn]
   ;; walk-fn can update children so do a let-binding
   (let [node (walk-fn node)]
@@ -23,11 +40,11 @@
 (defn post-order-nodes [target]
   (let [list (java.util.ArrayList.)
         queue (java.util.LinkedList.)
-        seen? (java.util.IdentityHashMap.)
+        seen? (java.util.HashSet.)
         add-to-queue (fn [x]
-                       (when-not (.containsKey seen? x)
+                       (when-not (.contains seen? (:ref-name x))
                          (.add queue x)
-                         (.put seen? x 1)))]
+                         (.add seen? (:ref-name x))))]
     (add-to-queue target)
     (loop []
       (if-let [n (.poll queue)]

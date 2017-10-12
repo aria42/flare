@@ -26,7 +26,7 @@
 
 (defn reset-batch!
   "Reset all gradients except the target node"
-  [model loss-node]
+  [model]
   ;; zero out gradients for param nodes
   (let [factory (model/tensor-factory model)]
     (doseq [[_ param-node] model]
@@ -58,12 +58,12 @@
        (p/safe-get opts :learning-rate)
        (p/safe-get param-node :grad)))))
 
-(defn run-batch! [model loss-node batch]
+(defn run-batch! [model get-loss-node batch]
   (let [factory (model/tensor-factory model)]
-    (reset-batch! model loss-node)
+    (reset-batch! model)
     (loop [batch-loss 0.0 batch batch]
-      (if-let [input->vals (first batch)]
-        (let [loss-node (compute/forward-pass! loss-node model input->vals)
+      (if-let [data (first batch)]
+        (let [loss-node (get-loss-node data)
               _ (tensors/copy-from-input! factory (:grad loss-node) [1.0])
               loss-val (->> loss-node :value (tensors/->clj factory) first)]
           ;; side-effect to update gradients
@@ -71,11 +71,11 @@
           (recur (+ batch-loss 0.0 (double loss-val)) (next batch)))
         batch-loss))))
 
-(defn sgd-iter! [model loss-node data-gen opts]
+(defn sgd-iter! [model get-loss-node data-gen opts]
   (let [total-loss (atom 0.0)
         factory (model/tensor-factory model)]
     (doseq [batch (data-gen)]
-      (let [batch-loss (run-batch! model loss-node batch)]
+      (let [batch-loss (run-batch! model get-loss-node batch)]
         (swap! total-loss + batch-loss))
       (update-params! model batch opts))
     (let [grads (mapcat (fn [[_ x]] (flatten (tensors/->clj factory (:grad x)))) model)
@@ -89,13 +89,24 @@
   "`data-gen` should be called to yield a lazy sequence over batches. Each batch
    is a sequence of {input-name clj-tensor} maps (see schema above)"
   ([model :- model/PModel
-    target-node
+    get-loss-node
     data-gen :- (s/=> [DataBatch])
     opts :- TrainOpts]
    (let [factory (model/tensor-factory model)
          opts (merge +default-train-opts+ opts)]
      (dotimes [iter (:num-iters opts)]
-       (let [loss (sgd-iter! model target-node data-gen opts)]
+       (printf "Iteration %d\n" iter)
+       (let [loss (sgd-iter! model get-loss-node data-gen opts)]
          (printf "End of iteration %d: %.3f\n" iter loss)))))
-  ([model target-node data-gen]
-   (sgd! model target-node data-gen {})))
+  ([model get-loss-node data-gen]
+   (sgd! model get-loss-node data-gen {})))
+
+
+(defn static-graph-sgd!
+  [model loss-node data-gen opts]
+  (sgd!
+   model
+   (fn [input->vals] (compute/forward-pass! loss-node model input->vals))
+   data-gen
+   opts))
+

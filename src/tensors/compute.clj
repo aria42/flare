@@ -135,20 +135,25 @@
   associated with any node"
   ([^Node target model] (forward-pass! target model {}))
   ([^Node target model input->vals]
-   (let [nodes (graph/post-order-nodes target)
+   (let [nodes (graph/topographic target)
          factory (model/tensor-factory model)
-         computed-nodes (java.util.HashMap. (count nodes))]
+         computed-nodes (java.util.HashMap. (count nodes))
+         get-canonical (fn [^Node node] (.get computed-nodes (.ref-name node)))]
      (validate-input-keys nodes input->vals)
      ;; Copy input values to node tensors
-     (graph/bottom-up-walk
-      target
-      (fn walk-fn [^Node node]
-        (if-let [computed (.get computed-nodes (.ref-name node))]
-          computed
-          (let [^Node node (-compile-hack node factory input->vals model)
-                ^Node node (-forward-intrnal node)]
-            (.put computed-nodes (.ref-name node) node)
-            node)))))))
+     (doseq [^Node onode nodes]
+       (when-not (get-canonical onode)
+         (let [new-children (java.util.ArrayList. (count (:children onode)))]
+           (doseq [c (:children onode)]
+             (let [cc (get-canonical c)]
+               (when-not cc
+                 (throw (ex-info "No child canonical" {:missing c})))
+               (.add new-children cc)))
+           (let [node (assoc onode :children new-children)
+                 ^Node node (-compile-hack node factory input->vals model)
+                 ^Node node (-forward-intrnal node)]
+             (.put computed-nodes (.ref-name node) node)))))
+     (.get computed-nodes (.ref-name target)))))
 
 (defn backward-pass!
   "backward-pass through all the parameter nodes associated with
