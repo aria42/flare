@@ -27,6 +27,9 @@
     :parse-fn #(Integer/parseInt ^String %)]
    ["-l" "--lstm-size NUM" "lstm size"
     :default 25
+    :parse-fn #(Integer/parseInt ^String %)]
+   ["-x" "--num-data DATA"
+    :default 10000
     :parse-fn #(Integer/parseInt ^String %)]])
 
 (defn gen-sentence [n]
@@ -55,9 +58,10 @@
             [rev-outputs _] (rnn/build-seq rev-cell (reverse inputs))
             concat-hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))
             logits (cg/* hidden->logits concat-hidden)]
-        (cg/cross-entropy-loss
-         logits
-         (node/constant "tag" factory [tag]))))))
+        (when (seq inputs)
+            (cg/cross-entropy-loss
+             logits
+             (node/constant "tag" factory [tag])))))))
 
 (defn load-data [path]
   (for [line (line-seq (io/reader path))
@@ -65,7 +69,7 @@
     [sent (Integer/parseInt tag)]))
 
 (defn train [opts]
-  (let [all-data (take 400 (load-data (:train-file opts)))
+  (let [all-data (take (:num-data opts) (load-data (:train-file opts)))
         emb (load-embeddings opts)
         gen-batches #(partition 32 all-data)
         factory (no/->Factory)

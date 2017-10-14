@@ -63,12 +63,13 @@
     (reset-batch! model)
     (loop [batch-loss 0.0 batch batch]
       (if-let [data (first batch)]
-        (let [loss-node (get-loss-node data)
-              _ (tensors/copy-from-input! factory (:grad loss-node) [1.0])
-              loss-val (->> loss-node :value (tensors/->clj factory) first)]
-          ;; side-effect to update gradients
-          (compute/backward-pass! loss-node)
-          (recur (+ batch-loss 0.0 (double loss-val)) (next batch)))
+        (if-let [loss-node (get-loss-node data)]
+          (let [_ (tensors/copy-from-input! factory (:grad loss-node) [1.0])
+                loss-val (->> loss-node :value (tensors/->clj factory) first)]
+            ;; side-effect to update gradients
+            (compute/backward-pass! loss-node)
+            (recur (+ batch-loss 0.0 (double loss-val)) (next batch)))
+          (recur batch-loss (next batch)))
         batch-loss))))
 
 (defn sgd-iter! [model get-loss-node data-gen opts]
@@ -96,8 +97,11 @@
          opts (merge +default-train-opts+ opts)]
      (dotimes [iter (:num-iters opts)]
        (printf "Iteration %d\n" iter)
-       (let [loss (sgd-iter! model get-loss-node data-gen opts)]
-         (printf "End of iteration %d: %.3f\n" iter loss)))))
+       (let [time (System/currentTimeMillis)
+             loss (sgd-iter! model get-loss-node data-gen opts)]
+         (let [delta-ms (- (System/currentTimeMillis) time)]
+           (printf "End of iteration %d: %.3f (%d ms) \n" iter loss delta-ms)
+           (.flush System/out))))))
   ([model get-loss-node data-gen]
    (sgd! model get-loss-node data-gen {})))
 
