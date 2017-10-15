@@ -357,7 +357,7 @@
   (case (count shape)
     1 (dv nums)
     2 (let [[row col] shape]
-        (dge row col (apply concat nums) {:order :row}))
+        (dge row col (apply concat nums) {:layout :row}))
     ;; else
     (throw (ex-info "Unallowed shape" {:shape (vec shape)}))))
 
