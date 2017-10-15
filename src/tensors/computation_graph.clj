@@ -223,7 +223,7 @@
           concat-len (reduce clojure.core/+ (map #(nth % dim-to-cat) shapes))]
       (assoc (first shapes) dim-to-cat concat-len))))
 
-(defn ^:private scalar-op
+(defn scalar-op
   "graph operation of single argument where output is same shape"
   [key]
   (reify GraphOp
