@@ -136,6 +136,15 @@
         [num-rows])))
   (op-descriptor [this] "*"))
 
+(defrecord ArgMaxGraphOp []
+  GraphOp
+  (op-key [this] :arg-max)
+  (op-validate! [this nodes]
+    (when-not (= 1 (count nodes))
+      (throw (ex-info "Required 1 arg" {:nodes nodes}))))
+  (op-descriptor [this] "arg-max")
+  (forward-shape [this nodes] [1]))
+
 (s/defn ensure-vector-tensor?! [prefix shape :- tensors/Shape]
   (let [n (count shape)
         dim-counts (frequencies shape)]
@@ -269,22 +278,10 @@
   [x y]
   (add-graph-op (HadamardProduct.) [x y]))
 
+(defn arg-max
+  [x]
+  (add-graph-op (ArgMaxGraphOp.) [x]))
+
 (defn concat
   [dim & inputs]
   (add-graph-op (->ConcatOp dim) inputs))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Compund Graph Operations (usually modify model, adding params)
-
-(s/defn affine :- Node
-  "create affine output, under the hood will add the
-    following parameters to the model
-     - 'affine/W' [num-out-dims first-input-dim]
-     - 'affine/b' num-out-dimes + rest-of-input-dims"
-  [m :- model/PModel input :- Node num-out-dims :- s/Int]
-  (node/with-scope "affine"
-    (let [[first-dim & rest] (.shape input)
-          out-shape (vec (cons num-out-dims rest))
-          W (model/add-params! m [num-out-dims first-dim] :name "W")
-          b (model/add-params! m out-shape :name "b")]
-      (+ (* W input) b))))

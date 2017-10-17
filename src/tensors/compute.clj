@@ -5,7 +5,6 @@
             [plumbing.core :as p]
             [schema.core :as s]
             [clojure.set :as set]
-            [tensors.model :as model]
             [tensors.cache-pool :as cache-pool])
   (:import [tensors.node Node]))
 
@@ -83,18 +82,16 @@
   (when-let [return-fn (-> node meta (get (return-key key)))]
     (return-fn)))
 
-(defn with-tensors [^Node node model]
-  (let [factory (model/tensor-factory model)]
-    (key-case (.type node)
-              ;; must create a new vlaue
-              :input (ensure-tensor! node :value factory)
-              :constant node
-              ;; re-use the model values
-              :params (model/canonical-node model (.ref-name node))
-              ;; new values + grad
-              :op (-> node
-                      (ensure-tensor! :value factory)
-                      (ensure-tensor! :grad factory)))))
+(defn with-tensors [^Node node factory]
+  (key-case (.type node)
+            ;; must create a new vlaue
+            :input (ensure-tensor! node :value factory)
+            :constant node
+            :params node
+            ;; new values + grad
+            :op (-> node
+                    (ensure-tensor! :value factory)
+                    (ensure-tensor! :grad factory))))
 
 (defn with-tensor-op [^Node node factory]
   (if (identical? (.type node) :op)
@@ -103,9 +100,9 @@
              :tensor-op tensor-op))
     node))
 
-(defn -compile-hack [^Node node factory input->vals model]
+(defn -compile-hack [^Node node factory input->vals]
   (let [^Node node  (-> node
-                        (with-tensors model)
+                        (with-tensors factory)
                         (with-tensor-op factory))]
     (when (identical? :input (.type node))
       (let [vals (p/safe-get input->vals (.ref-name node))]
@@ -133,10 +130,9 @@
   "forward-pass will topographic walk through graph writing to `:value`
   key on all compiled nodes. You can then look up and retrieve the tensors
   associated with any node"
-  ([^Node target model] (forward-pass! target model {}))
-  ([^Node target model input->vals]
+  ([^Node target factory] (forward-pass! target factory {}))
+  ([^Node target factory input->vals]
    (let [nodes (graph/topographic target)
-         factory (model/tensor-factory model)
          computed-nodes (java.util.HashMap. (count nodes))
          get-canonical (fn [^Node node] (.get computed-nodes (.ref-name node)))]
      (validate-input-keys nodes input->vals)
@@ -150,7 +146,7 @@
                  (throw (ex-info "No child canonical" {:missing c})))
                (.add new-children cc)))
            (let [node (assoc onode :children new-children)
-                 ^Node node (-compile-hack node factory input->vals model)
+                 ^Node node (-compile-hack node factory input->vals)
                  ^Node node (-forward-intrnal node)]
              (.put computed-nodes (.ref-name node) node)))))
      (.get computed-nodes (.ref-name target)))))
@@ -168,8 +164,8 @@
                 ;; must create a new vlaue
                 :input (release-tensor! n :value)
                 :constant nil
+                :params nil
                 ;; new values + grad
                 :op (do
                       (release-tensor! n :value)
-                      (release-tensor! n :grad))
-                :params nil))))
+                      (release-tensor! n :grad))))))

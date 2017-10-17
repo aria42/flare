@@ -7,12 +7,14 @@
             [tensors.compute :as compute]
             [tensors.core :as tensors]
             [tensors.model :as model]
+            [tensors.module :as module]
             [tensors.train :as train]
             [tensors.computation-graph :as cg]
             [uncomplicate.neanderthal.native :refer :all]
             [uncomplicate.neanderthal.core :refer :all]
             [clojure.tools.cli :refer [parse-opts]]
-            [tensors.node :as node]))
+            [tensors.node :as node]
+            [tensors.report :as report]))
 
 (defn generate-data [num-datums num-classes num-feats]
   (let [r (java.util.Random. 0)
@@ -28,23 +30,28 @@
             label (imax activations)]
         {"f" f "label" (dv [label])}))))
 
-(defn lr-loss [m num-classes num-feats]
+(defn logistic-regression [model num-classes num-feats]
   (let [feat-vec (node/input "f" [num-feats])
-        activations (cg/affine m feat-vec num-classes)
-        label (node/input "label" [1])]
-    (cg/cross-entropy-loss activations label)))
+        label (node/input "label" [1])
+        aff (module/affine model num-classes [num-feats])
+        activations (module/graph aff feat-vec)
+        predict (cg/arg-max activations)
+        loss (cg/cross-entropy-loss activations label)]
+    [loss predict]))
 
 (defn train [{:keys [engine, num-examples, num-iters, num-feats, num-batch] :as opts}]
   (println "options " opts)
   (let [num-classes 5
         factory (case engine
                   :nd4j (nd4j-ops/->Factory)
-                  :neanderthal (no/->Factory))
+                  :neanderthal (no/factory))
         m (model/simple-param-collection factory)
-        loss (lr-loss m num-classes num-feats)
+        [loss predict] (logistic-regression m num-classes num-feats)
         data (doall (generate-data num-examples num-classes num-feats))
         batch-gen #(partition num-batch data)
-        train-opts {:num-iters num-iters :learning-rate 0.01}]
+        train-opts {:num-iters num-iters
+                    :learning-rate 0.01
+                    :iter-reporter (report/training)}]
     (train/static-graph-sgd! m loss batch-gen train-opts)))
 
 (def cli-options

@@ -3,6 +3,7 @@
             [tensors.model :as model]
             [tensors.compute :as compute]
             [tensors.core :as tensors]
+            [tensors.report :as report]
             [plumbing.core :as p]
             [tensors.graph :as graph]))
 
@@ -14,9 +15,11 @@
 (s/defschema DataBatch
   [{s/Str (s/named (s/pred clj-tensor?) "clj-tensor")}])
 
+
 (s/defschema TrainOpts
   {(s/optional-key :num-iters) s/Int
    (s/optional-key :learning-rate) s/Num
+   (s/optional-key :batch-reporter) report/Reporter
    (s/optional-key :grad-clip) s/Num})
 
 (def +default-train-opts+
@@ -76,14 +79,18 @@
   (let [total-loss (atom 0.0)
         factory (model/tensor-factory model)]
     (doseq [batch (data-gen)]
-      (let [batch-loss (run-batch! model get-loss-node batch)]
-        (swap! total-loss + batch-loss))
+      (let [batch-loss (run-batch! model get-loss-node batch)
+            batch-info {:batch-loss batch-loss :model model :batch batch}]
+        (when-let [reporter (:batch-reporter opts)]
+          (report/update! reporter batch-info)
+          (when-let [r (report/gen reporter)]
+            (clojure.pprint/pprint r)))
+        (swap! total-loss + batch-loss)
+        (when-let [callback (:batch-callback opts)]
+          (when-let [report (callback model batch batch-loss)]
+            (println (clojure.pprint/pprint report)))))
       (update-params! model batch opts))
-    (let [grads (mapcat (fn [[_ x]] (flatten (tensors/->clj factory (:grad x)))) model)
-          l2-norm (Math/sqrt (reduce (fn [res x] (+ res (* x x))) grads))
-          max-l1-norm (apply max (map (fn [x] (Math/abs (double x))) grads))]
-      (printf "l2-norm: %.3f\n" l2-norm)
-      (printf "max-abs: %.3f\n" max-l1-norm))
+    (when-let [reporter (:iter-reporter )])
     @total-loss))
 
 (s/defn sgd!
@@ -96,6 +103,10 @@
    (let [factory (model/tensor-factory model)
          opts (merge +default-train-opts+ opts)]
      (dotimes [iter (:num-iters opts)]
+       (when-let [reporter (:batch-reporter opts)]
+         (report/clear! reporter))
+       (when-let [reporter (:iter-reporter opts)]
+         (report/clear! reporter))
        (printf "Iteration %d\n" iter)
        (let [time (System/currentTimeMillis)
              loss (sgd-iter! model get-loss-node data-gen opts)]
@@ -110,7 +121,6 @@
   [model loss-node data-gen opts]
   (sgd!
    model
-   (fn [input->vals] (compute/forward-pass! loss-node model input->vals))
+   (fn [input->vals] (compute/forward-pass! loss-node (model/tensor-factory model) input->vals))
    data-gen
    opts))
-

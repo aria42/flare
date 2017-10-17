@@ -36,9 +36,9 @@
   (take n (repeatedly #(first (shuffle #{"the" "dog" "barks"})))))
 
 (defn load-embeddings [opts]
-  (let [factory (no/->Factory)]
+  (let [factory (no/factory)]
     (embeddings/fixed-embedding
-     (no/->Factory)
+     (no/factory)
      (:emb-size opts)
      (-> opts :embed-file io/reader embeddings/read-text-embedding-pairs))))
 
@@ -72,11 +72,11 @@
   (let [all-data (take (:num-data opts) (load-data (:train-file opts)))
         emb (load-embeddings opts)
         gen-batches #(partition 32 all-data)
-        factory (no/->Factory)
+        factory (no/factory)
         m (model/simple-param-collection factory)
         ;; need to provide forward-computed graph for loss
         gb (comp
-            (fn [n] (compute/forward-pass! n m))
+            (fn [n] (compute/forward-pass! n factory))
             (graph-builder m emb (:lstm-size opts) (:num-classes opts)))
         train-opts {:num-iters 100 :learning-rate 0.01}]
     (train/sgd! m gb gen-batches train-opts)))
@@ -88,7 +88,7 @@
                :num-classes 2
                :train-file "data/sentiment-10k.txt"
                :emb-size 50})
-    (def factory (no/->Factory))
+    (def factory (no/factory))
     (def emb (load-embeddings opts))
     (def model (model/simple-param-collection factory))
     (def cell (rnn/lstm-cell model (:emb-size opts) (:lstm-size opts)))

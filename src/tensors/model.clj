@@ -63,11 +63,7 @@
   The factory is also adorned with a caching pool under the
   :cache meta-data "
   [factory :- tensors/PFactory]
-  (let [m (java.util.HashMap.)
-        mk-tensor (fn [shape]
-                    #_(println "Cache miss on " shape)
-                    (tensors/zeros factory shape))
-        factory (with-meta factory {:cache (cache-pool/make 100 mk-tensor)})]
+  (let [m (java.util.HashMap.)]
     (with-meta
       (reify
 
@@ -101,7 +97,6 @@
             (when-let [param (.get m param-name)]
               (let [param-tensor (:value param)]
                 (tensors/copy-from-input! factory param-tensor tensor-like)))))
-
         clojure.lang.Seqable
         (seq [this]
           (for [e m] [(key e) (val e)])))

@@ -17,16 +17,16 @@
 
 (deftest param-collection-test
   (testing "simple param collection test"
-    (let [m (simple-param-collection (no/->Factory))
+    (let [m (simple-param-collection (no/factory))
           n (add-params! m  [2 2] :name "W")]
       (is (= n (canonical-node m "W")))
       (is (= n (get (into {} (seq m)) "W")))))
   (testing "disallow repeated names"
-    (let [m (simple-param-collection (no/->Factory))]
+    (let [m (simple-param-collection (no/factory))]
       (add-params! m [2 2] :name "W")
       (is (thrown? Exception (add-params! m [2 2] "W")))))
   (testing "can init!"
-    (let [m (simple-param-collection (no/->Factory))]
+    (let [m (simple-param-collection (no/factory))]
       (add-params! m [2 2] :name "W1")
       (add-params! m [2 2] :name "W2")
       (doseq [k ["W1" "W2"]]

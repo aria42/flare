@@ -214,6 +214,13 @@
           op (->ConcatTensorOp)]
       (compute/forward-node-pass! op o)
       (is (= (dge 1 5 (range 1 6))(:value o)))))
+
+  (testing "arg-max test"
+    (let [n (node/map->Node {:shape [2] :value (dv [3.0 1.0])})
+          o (node/map->Node {:shape [1] :value (dv 1) :children [n]})
+          op (->ArgMaxTensorOp)]
+      (= [0] (seq (:value (compute/forward-node-pass! op o))))))
+
   (testing "concat backward test"
     (let [n1 (node/map->Node {:shape [2] :grad (dv 2)})
           n2 (node/map->Node {:shape [3] :grad (dv 3)})

@@ -13,10 +13,9 @@
     (let [X (node/input "X" [2 2])
           Y (node/input "Y" [2 2])
           Z (cg/+ X Y)
-          factory (no/->Factory)
-          model (model/simple-param-collection factory)
+          factory (no/factory)
           input-vals {"X" [[1 2] [2 1]] "Y" [[1 2] [1 1]]}]
-      (let [Z (forward-pass! Z model input-vals)]
+      (let [Z (forward-pass! Z factory input-vals)]
         (is (= [[2.0 4.0] [3.0 2.0]]
                (tensors/->clj factory (:value Z))))
         (is (= [[0.0 0.0] [0.0 0.0]]
@@ -24,7 +23,7 @@
   (testing "lr graph"
     (let [num-classes 2
           num-feats 3
-          factory (no/->Factory)
+          factory (no/factory)
           m (model/simple-param-collection factory)
           W (model/add-params! m [num-classes num-feats] :name "W")
           b (model/add-params! m [num-classes] :name "b")
@@ -36,7 +35,7 @@
       (let [input->vals {"f" [1 2 1] "label" [0]}
             one-grad (tensors/from-nums factory [1.0])
             loss (-> loss
-                     (forward-pass! m input->vals)
+                     (forward-pass! factory input->vals)
                      (assoc :grad one-grad))]
         (is (not (neg? (first (tensors/->clj factory (:value loss))))))
         (backward-pass! loss)
@@ -49,7 +48,7 @@
         loss))
     )
   (testing "repeated test"
-    (let [factory (no/->Factory)
+    (let [factory (no/factory)
           model (model/simple-param-collection factory)
           params-map (-> model meta :data)
           ;; need to override value 
@@ -59,7 +58,7 @@
       (tensors/copy-from-input! factory
          (:value (get params-map (:ref-name X)))
          [2.0 2.0])
-      (let [Z (forward-pass! Z model)]
+      (let [Z (forward-pass! Z factory)]
         (is (= [4.0 4.0] (tensors/->clj factory (:value Z))))
         (backward-pass! (assoc Z :grad (tensors/from-nums factory [1 1])))
         (is (= [2.0 2.0] (tensors/->clj factory (:grad X))))))))

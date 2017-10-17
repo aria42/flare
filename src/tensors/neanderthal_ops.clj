@@ -9,7 +9,8 @@
             [uncomplicate.neanderthal.native :as native]
             [uncomplicate.neanderthal.real :as real]
             [schema.core :as s]
-            [plumbing.core :as p])
+            [plumbing.core :as p]
+            [tensors.cache-pool :as cache-pool])
   (:import [tensors.node Node]))
 
 (defn ^:private valid-shape? [shape]
@@ -231,6 +232,21 @@
     (alter! out! (fn ^double [^long i ^long j ^double cur]
                    (+ cur (* (real/entry x i j) (real/entry y i j)))))))
 
+(defrecord ArgMaxTensorOp []
+  compute/TensorOp
+  (ensure-valid?! [this [X]]
+    (when-not (= 1 (count (:shape X)))
+      (throw (ex-info "Only handle vectors" {:X X})))
+    true)
+  (prep [this node] node)
+  (forward-node-pass! [this node]
+    (let [output (p/safe-get node :value)
+          X (-> node :children first :value)]
+      (real/entry! output 0 (imax X))
+      node))
+  (backward-node-pass! [this node]
+    (throw (ex-info "Not Supported"))))
+
 (defrecord HadamardTensorOp []
   compute/TensorOp
   (ensure-valid?! [this [X Y]]
@@ -348,7 +364,8 @@
     :strech ->StrechTensorOp
     :hadamard ->HadamardTensorOp
     :concat ->ConcatTensorOp
-    :cross-entropy-loss ->CrossEntropyLossTensorOp}
+    :cross-entropy-loss ->CrossEntropyLossTensorOp
+    :arg-max ->ArgMaxTensorOp}
    (p/map-vals
     (fn [[fx dfx]] #(->ElementwiseTransformOp fx dfx))
     +elementwise-op+)))
@@ -431,3 +448,10 @@
       2 (dge (first shape) (second shape))
       (throw (ex-info "Unallowed shape for neanderthal"
                       {:shape (vec shape)})))))
+
+(defn factory [& [num-to-cache]]
+  (let [f (->Factory)]
+    (with-meta f
+      {:cache (cache-pool/make
+               (or num-to-cache 100)
+               (fn [shape] (tensors/zeros f shape)))})))

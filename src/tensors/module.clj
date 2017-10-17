@@ -6,25 +6,55 @@
   (:import [tensors.node Node]))
 
 (defprotocol Module
-  (params [this])
-  (graph [this input]))
+  (graph
+    [this]
+    [this input]
+    [this input1 input2]))
+
+(defprotocol ModelModule
+  (-params [this])
+  (predict-graph
+    [this]
+    [this input]
+    [this input1 input2]))
+
+(defprotocol InputModule
+  (-required-inputs [this]))
+
+(defn params [module]
+  (when (satisfies? ModelModule module)
+    (-params module)))
+
+(defn required-inputs [module]
+  (when (satisfies? InputModule module)
+    (-required-inputs module)))
 
 (defn from-op [op]
   (reify Module
-    (params [this] [])
     (graph [this input]
       (cg/add-graph-op
        op
        [input]))))
 
 (defn comp [& ms]
-  (reify Module
-    (params [this] (mapcat params ms))
+  (reify
+    Module
     (graph [this input]
       (reduce
        (fn [result m] (graph m result))
        input
-       (reverse ms)))))
+       (reverse ms)))
+
+    ModelModule
+    (-params [this] (mapcat params ms))
+    (predict-graph [this input]
+      (reduce
+       (fn [result m] (graph m result))
+       input
+       (reverse ms)))
+
+    InputModule
+    (-required-inputs [this] (mapcat required-inputs ms))))
 
 
 (defn affine
@@ -37,6 +67,7 @@
           W (model/add-params! model [num-out first-dim] :name "W")
           b (model/add-params! model out-shape :name "b")]
       (reify Module
-        (params [this] [W b])
         (graph [this x]
-          (cg/+ (cg/* W x) b))))))
+          (cg/+ (cg/* W x) b))
+        ModelModule
+        (-params [this] [W b])))))
