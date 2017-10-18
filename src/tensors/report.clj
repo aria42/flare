@@ -15,6 +15,21 @@
   (clear! [this])
   (gen [this]))
 
+(defn test-accuracy [get-data get-pred-node]
+  (reify Reporter
+    (update! [this info])
+    (clear! [this])
+    (gen [this]
+      (let [[num-correct total]
+            (->> (get-data)
+                 (map (fn [[x label]]
+                        (= label (-> x get-pred-node :value first))))
+                 (reduce (fn [[num-correct total] correct?]
+                           [(if correct? (inc num-correct) num-correct)
+                            (inc total)])
+                         [0 0]))]
+        {:test-accuracy {:acc (/ (double num-correct) total) :n total}}))))
+
 (defn avg-loss []
   (let [sum (atom 0.0)
         n (atom 0)]

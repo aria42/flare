@@ -90,14 +90,13 @@
           (when-let [report (callback model batch batch-loss)]
             (println (clojure.pprint/pprint report)))))
       (update-params! model batch opts))
-    (when-let [reporter (:iter-reporter )])
     @total-loss))
 
 (s/defn sgd!
   "`data-gen` should be called to yield a lazy sequence over batches. Each batch
    is a sequence of {input-name clj-tensor} maps (see schema above)"
   ([model :- model/PModel
-    get-loss-node
+    get-loss-node :- (s/=> tensors.node.Node s/Any)
     data-gen :- (s/=> [DataBatch])
     opts :- TrainOpts]
    (let [factory (model/tensor-factory model)
@@ -110,6 +109,9 @@
        (printf "Iteration %d\n" iter)
        (let [time (System/currentTimeMillis)
              loss (sgd-iter! model get-loss-node data-gen opts)]
+         (when-let [reporter (:iter-reporter opts)]
+           (when-let [r (report/gen reporter)]
+             (clojure.pprint/pprint r)))
          (let [delta-ms (- (System/currentTimeMillis) time)]
            (printf "End of iteration %d: %.3f (%d ms) \n" iter loss delta-ms)
            (.flush System/out))))))
@@ -119,8 +121,9 @@
 
 (defn static-graph-sgd!
   [model loss-node data-gen opts]
-  (sgd!
-   model
-   (fn [input->vals] (compute/forward-pass! loss-node (model/tensor-factory model) input->vals))
-   data-gen
-   opts))
+  (let [factory (model/tensor-factory model)]
+    (sgd!
+     model
+     (fn [input->vals] (compute/forward-pass! loss-node factory input->vals))
+     data-gen
+     opts)))

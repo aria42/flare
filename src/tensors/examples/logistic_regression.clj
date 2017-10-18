@@ -1,5 +1,4 @@
 (set! *unchecked-math* true)
-
 (ns tensors.examples.logistic-regression
   (:gen-class)
   (:require [tensors.neanderthal-ops :as no]
@@ -16,13 +15,13 @@
             [tensors.node :as node]
             [tensors.report :as report]))
 
-(defn generate-data [num-datums num-classes num-feats]
+(defn data-generator [num-classes num-feats]
   (let [r (java.util.Random. 0)
         W (dge num-classes num-feats)
         b (dv num-classes)]
     (alter! W (fn ^double [^long idx1 ^long idx2 ^double w] (.nextDouble r)))
     (alter! b (fn ^double [^long idx ^double w] (.nextDouble r)))
-    (for [_ (range num-datums)]
+    (fn []
       (let [rand-feats (mapv (fn [_] (if (.nextBoolean r) 1.0 0.0)) (range num-feats))
             f (dv rand-feats)
             class-idx (.nextInt r (int num-classes))
@@ -39,28 +38,29 @@
         loss (cg/cross-entropy-loss activations label)]
     [loss predict]))
 
-(defn train [{:keys [engine, num-examples, num-iters, num-feats, num-batch] :as opts}]
+(defn train [{:keys [num-examples, num-iters, num-feats, num-batch] :as opts}]
   (println "options " opts)
   (let [num-classes 5
-        factory (case engine
-                  :nd4j (nd4j-ops/->Factory)
-                  :neanderthal (no/factory))
+        factory (no/factory)
         m (model/simple-param-collection factory)
         [loss predict] (logistic-regression m num-classes num-feats)
-        data (doall (generate-data num-examples num-classes num-feats))
+        get-data (data-generator  num-classes num-feats)
+        data (doall (take num-examples (repeatedly get-data)))
+        test-data (doall (take num-examples (repeatedly get-data)))
         batch-gen #(partition num-batch data)
         train-opts {:num-iters num-iters
                     :learning-rate 0.01
-                    :iter-reporter (report/training)}]
+                    :iter-reporter (report/test-accuracy
+                                    (fn []
+                                      (for [x test-data]
+                                        [x (first (get x "label"))]))
+                                    (fn [x]
+                                      (compute/forward-pass! predict factory x)))}]
     (train/static-graph-sgd! m loss batch-gen train-opts)))
 
 (def cli-options
   ;; An option with a required argument
-  [["-e" "--engine ENGINE" "Engine {nd4j, neanderthal}"
-    :default :nd4j
-    :parse-fn keyword
-    :validate [#{:nd4j, :neanderthal} "Must be {nd4j, neanderthal}"]]
-   ["-b" "--num-batch NUM" "Number of batches"
+  [["-b" "--num-batch NUM" "Number of batches"
     :default 32
     :parse-fn #(Integer/parseInt %)]
    ["-n" "--num-examples NUM" "Number of elements"
@@ -75,8 +75,7 @@
    ["-h" "--help"]])
 
 (do
-  (def opts {:engine :neanderthal
-             :num-examples 1000
+  (def opts {:num-examples 10000
              :num-batch 32
              :num-feats 10
              :num-iters 100}))
