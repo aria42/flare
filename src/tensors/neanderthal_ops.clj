@@ -11,7 +11,8 @@
             [schema.core :as s]
             [plumbing.core :as p]
             [tensors.cache-pool :as cache-pool])
-  (:import [tensors.node Node]))
+  (:import [tensors.node Node]
+           [clojure.lang IFn$DD IFn$ODD IFn$DDD IFn$ODDD]))
 
 (defn ^:private valid-shape? [shape]
   (<= (count shape) 2))
@@ -312,7 +313,7 @@
       node)))
 
 (defrecord ElementwiseTransformOp
-  [^clojure.lang.IFn$DD fx ^clojure.lang.IFn$DD dfx]
+  [^IFn$DD fx ^IFn$DD dfx]
   compute/TensorOp
   (ensure-valid?! [this [X]]
     (ensure-valid-shape?! (:shape X))
@@ -396,28 +397,62 @@
     (if (vctr? tensor)
       (seq tensor)
       (doall (map seq (rows tensor)))))
-  (fill! [this tensor get-val-fn]
-    (let [constant? (number? get-val-fn)
-          fixed-return (double (if constant? get-val-fn 0.0))
+  (transform! [this tensor get-val]
+    (let [constant? (number? get-val)
+          fixed-return (double (if constant? get-val 0.0))
           dims (long-array (if (vctr? tensor) 1 2))
-          get-val-fn ^clojure.lang.IFn$ODD get-val-fn]
+          get-val ^IFn$ODD get-val]
       (if (and constant? (zero? fixed-return))
         (zero-fill this tensor)
         (alter! tensor
                 (case [constant? (vctr? tensor)]
                   [true true]
-                  (fn fill!-tt ^double [^long i ^double x] fixed-return)
+                  (fn tt ^double [^long i ^double x] fixed-return)
                   [false true]
-                  (fn fill!-ft ^double [^long i ^double x]
+                  (fn ft ^double [^long i ^double x]
                     (aset dims (int 0) i)
-                    (.invokePrim get-val-fn dims x))
+                    (.invokePrim get-val dims x))
                   [true false]
-                  (fn fill!-tf ^double [^long i ^long j ^double x] fixed-return)
+                  (fn tf ^double [^long i ^long j ^double x] fixed-return)
                   [false false]
-                  (fn fill!-ff ^double [^long i ^long j ^double x]
+                  (fn ff ^double [^long i ^long j ^double x]
                     (aset dims (int 0) i)
                     (aset dims (int 1) j)
-                    (.invokePrim get-val-fn dims x)))))))
+                    (.invokePrim get-val dims x)))))))
+  (transform! [this tensor other-tensor get-val]
+    (let [ddd? (instance? IFn$DDD get-val)
+          shape (tensors/shape this tensor)
+          oshape (tensors/shape this other-tensor)
+          ;; only need array when fn takes it
+          dims (when-not ddd?
+                 (long-array (if (vctr? tensor) 1 2)))]
+     (when-not (= shape oshape)
+       (throw (ex-info "Non-matching shapes"
+                       {:shape shape :other-shape oshape})))
+     (when (and (not ddd?) (not (instance? IFn$ODDD get-val)))
+       (throw (ex-info "Bad get-val, must be IFn$DDD or IFn$ODDD primitive"
+                       {:bad-fn get-val})))
+     (alter! tensor
+             (case [(vctr? tensor) ddd?]
+               [true true]
+               (fn tt ^double [^long i ^double x]
+                 (let [other-val (real/entry other-tensor i)]
+                   (.invokePrim ^IFn$DDD get-val x other-val)))
+               [false true]
+               (fn ft ^double [^long i ^long j ^double x]
+                 (let [other-val (real/entry other-tensor i j)]
+                   (.invokePrim ^IFn$DDD get-val x other-val)))
+               [true false]
+               (fn tf ^double [^long i  ^double x]
+                 (aset dims (int 0) i)
+                 (let [other-val (real/entry other-tensor i)]
+                   (.invokePrim ^IFn$ODDD get-val dims x other-val)))
+               [false false]
+               (fn ff ^double [^long i ^long j ^double x]
+                 (aset dims (int 0) i)
+                 (aset dims (int 1) j)
+                 (let [other-val (real/entry other-tensor i j)]
+                   (.invokePrim ^IFn$ODDD get-val dims x other-val)))))))
   (shape [this t]
     (if (vctr? t)
       [(dim t)]
@@ -428,6 +463,7 @@
       (-from-nums nums (tensors/guess-shape nums))))
   (grad-step! [this weights alpha grad]
     (axpy! (- (double alpha)) grad weights))
+
   (copy-from-input! [this tensor! nums]
     (cond
       ;; fast if the nums is already neanderthal

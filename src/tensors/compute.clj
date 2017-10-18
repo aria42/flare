@@ -73,7 +73,7 @@
         [t return-fn] (cache-pool/get-obj cache (.shape node))
         return-fn #(return-fn t)]
     (when (identical? key :grad)
-      (tensors/fill! factory t +zero+))
+      (tensors/transform! factory t +zero+))
     (-> node
         (assoc key t)
         (with-meta (assoc (meta node) (return-key key) return-fn)))))

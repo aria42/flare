@@ -56,7 +56,7 @@
                                         [x (first (get x "label"))]))
                                     (fn [x]
                                       (compute/forward-pass! predict factory x)))}]
-    (train/static-graph-sgd! m loss batch-gen train-opts)))
+    (train/static-train! m loss batch-gen train-opts)))
 
 (def cli-options
   ;; An option with a required argument

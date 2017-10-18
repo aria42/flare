@@ -35,6 +35,34 @@
         (is (= (:grad B) (dge 2 2 [1 1 1 1])))
         (is (= (:grad A) (dge 2 2 [1 1 1 1])))))))
 
+(deftest transform!-test
+  (let [f (->Factory)
+        t (tensors/zeros f [10])
+        m (tensors/zeros f [2 2])]
+    (testing "set constant value"
+      (tensors/transform! f t 2.0)
+      (is (= (repeat 10 2.0) (seq t)))
+      (tensors/transform! f m 2.0)
+      (is (= [[2. 2.] [2. 2.]] (seq m))))
+    (testing "set function value"
+      (tensors/transform! f t 0.0)
+      (tensors/transform! f t (fn ^double [^longs idxs ^double x]
+                                (+ x (double (aget idxs 0)))))
+      (is (= (map double (range 10)) (seq t)))
+      (tensors/transform! f m 0.0)
+      (tensors/transform! f m
+         (fn ^double [^longs idxs ^double x]
+           (double (+ x (aget idxs 0) (aget idxs 1)))))
+      (is (= [[0.0 1.0] [1.0 2.0]] (seq m))))
+    (testing "set function and other value"
+      (let [o (tensors/from-nums f (range 10))]
+        (tensors/transform! f t 0.0)
+        (tensors/transform! f t o (fn ^double [^double cur ^double other]
+                                    (* other other)))
+        (tensors/transform! f t o (fn ^double [^double cur ^double other]
+                                    (+ cur (* other other))))
+        (is (= (for [x (range 10)] (* 2.0 x x)) (seq t)))))))
+
 (deftest mult-tensor-op
   (testing "C = A B"
     (let [op (->MultTensorOp)

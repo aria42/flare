@@ -170,7 +170,7 @@
       (if (number? val)
         [val]
         val)))
-  (fill! [this tensor get-val-fn]
+  (transform! [this tensor get-val-fn]
     (let [^INDArray tensor tensor]
       (if (number? get-val-fn)
         (.assign tensor ^Number get-val-fn)

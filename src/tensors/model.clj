@@ -38,6 +38,7 @@
   (-add-params! [this param-name shape init-spec]
     "add parameters to the model, returns a param graph node. Some
      argument defaulting happens below so this is the internal method")
+  (-add-param-metadata! [this param-name key val])
   (canonical-node [this param-name]
     "returns a caonical `Node` for the parameter. If parameters
      have been initialized, also returns `:value` and `:grad` tensor fields"))
@@ -53,6 +54,13 @@
     (s/validate s/Str name)
     (s/validate InitParamSpec init)
     (-add-params! model name shape init)))
+
+(defn with-metadata!
+  [model param-node-or-name key value]
+  (let [node-name (if (instance? Node param-node-or-name)
+                    (.ref-name ^Node param-node-or-name)
+                    param-node-or-name)]
+    (-add-param-metadata! model node-name key value)))
 
 
 (s/defn simple-param-collection :- PModel
@@ -83,9 +91,14 @@
                          :init init-spec})
                   get-param-val (get-param-rng init-spec)]
               ;; initialize param vals from init-spec
-              (tensors/fill! factory (:value node) get-param-val)
+              (tensors/transform! factory (:value node) get-param-val)
               (.put m param-name node)
               node)))
+        (-add-param-metadata! [this param-name key val]
+          (let [n (canonical-node this param-name)
+                n (with-meta n (assoc (meta n) key val))]
+            (.put m param-name n)
+            n))
         (canonical-node [this param-or-name] (.get m param-or-name))
 
         -TestPModel

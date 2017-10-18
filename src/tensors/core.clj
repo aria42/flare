@@ -43,14 +43,24 @@
   (from-nums [this nums])
   (get-op [this op-key])
   (zeros [this shape])
-  (fill! [this tensor new-val]
-    "`new-val` can be a few different things
-       * A fixed double
+  (transform!
+    [this tensor get-val]
+    [this tensor other-tensor get-val]
+    "`get-val` can be a few different things, depending on arity
+
+      Three argument version [this tensor get-val]
+      ==============================
+       * A fixed double to fill `tensor`
        * A IFn$ODD primitive function taking (dims, existing) which
-         is a long-array or the current value as a double and returns
-         new value a long-array of the indices of the current value,
-         then the value at that position, then the function returns
-         a new value for that position")
+         returns new value for the position
+
+
+      Four argument version [this tensor other-tensor get-val]
+      ================================
+      Assumes other-tensor shape matches tensor
+      * IFn$DDD takes (cur-val, other-val) and returns new value
+      * IFn$ODDD takes (position, cur-val, other-val) and position
+        is the long-array of the location")
   (->clj [this tensor])
   (grad-step! [this weight alpha grad])
   (copy-from-input! [this tensor! nums])
