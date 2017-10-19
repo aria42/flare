@@ -480,7 +480,7 @@
               (copy! (-from-nums nums shape) tensor!))))
   (zeros [this shape]
     (case (count shape)
-      1 (dv (seq (double-array (first shape))))
+      1 (dv (first shape))
       2 (dge (first shape) (second shape))
       (throw (ex-info "Unallowed shape for neanderthal"
                       {:shape (vec shape)})))))

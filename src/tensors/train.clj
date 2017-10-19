@@ -28,39 +28,8 @@
    :grad-clip 10.0
    :learning-rate 0.01})
 
-(defn reset-batch!
-  "Reset all gradients except the target node"
-  [model]
-  ;; zero out gradients for param nodes
-  (let [factory (model/tensor-factory model)]
-    (doseq [[_ param-node] model]
-      (tensors/transform! factory (p/safe-get param-node :grad) 0.0))))
-
-(defn ^:static clip ^double [^double x ^double min ^double max]
-  (if (> x max)
-    max
-    (if (< x min)
-      min
-      x)))
-
-(defn update-params! [model optimizer batch opts]
-  ;; take gradient step
-  (let [factory (model/tensor-factory model)]
-    (doseq [[_ param-node] model]
-      (let [grad-clip (double (:grad-clip opts 10.00))
-            normalizer (/ 1.0 (double (count batch)))
-            clip-min (- (Math/abs grad-clip))
-            clip-max (Math/abs grad-clip)]
-        (tensors/transform!
-         factory
-         (p/safe-get param-node :grad)
-         (fn ^double [^longs _ ^double x]
-           (clip (* normalizer x) clip-min clip-max))))
-      (optimize/update-params! optimizer param-node nil))))
-
 (defn run-batch! [model get-loss-node batch]
   (let [factory (model/tensor-factory model)]
-    (reset-batch! model)
     (loop [batch-loss 0.0 batch batch]
       (if-let [data (first batch)]
         (if-let [loss-node (get-loss-node data)]
@@ -76,6 +45,7 @@
   (let [total-loss (atom 0.0)
         factory (model/tensor-factory model)]
     (doseq [batch (data-gen)]
+      (optimize/reset-batch! optimizer model)
       (let [batch-loss (run-batch! model get-loss-node batch)
             batch-info {:batch-loss batch-loss :model model :batch batch}]
         (when-let [reporter (:batch-reporter opts)]
@@ -85,8 +55,8 @@
         (swap! total-loss + batch-loss)
         (when-let [callback (:batch-callback opts)]
           (when-let [report (callback model batch batch-loss)]
-            (println (clojure.pprint/pprint report)))))
-      (update-params! model optimizer batch opts))
+            (clojure.pprint/pprint report))))
+      (optimize/update-model! optimizer model (count batch) (:grad-clip opts 10.0)))
     @total-loss))
 
 (s/defn train!
@@ -97,8 +67,10 @@
     data-gen :- (s/=> [DataBatch])
     opts :- TrainOpts]
    (let [factory (model/tensor-factory model)
-         optimizer (optimize/->SGD factory (:learning-rate opts))
+         optimizer (optimize/->Adadelta factory (:learning-rate opts) 0.5 1.0e-3)
          opts (merge +default-train-opts+ opts)]
+     (println "Optimizing with " (type optimizer))
+     (optimize/init-model! optimizer model)
      (dotimes [iter (:num-iters opts)]
        (when-let [reporter (:batch-reporter opts)]
          (report/clear! reporter))

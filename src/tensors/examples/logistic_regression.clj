@@ -67,7 +67,7 @@
     :default 1000
     :parse-fn #(Integer/parseInt %)]
    ["-i" "--num-iters NUM" "Number of iters"
-    :default 100
+    :default 10
     :parse-fn #(Integer/parseInt %)]
    ["-f" "--num-feats NUM" "Number of feats"
    :default 100
@@ -78,7 +78,7 @@
   (def opts {:num-examples 10000
              :num-batch 32
              :num-feats 10
-             :num-iters 100}))
+             :num-iters 10}))
 
 (defn -main [& args]
   (let [parse (parse-opts args cli-options)]
