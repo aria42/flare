@@ -8,6 +8,7 @@
             [clojure.tools.cli :refer [parse-opts]]
             [tensors.neanderthal-ops :as no]
             [tensors.model :as model]
+            [tensors.report :as report]
             [tensors.computation-graph :as cg]
             [tensors.train :as train]))
 
@@ -32,9 +33,6 @@
     :default 10000
     :parse-fn #(Integer/parseInt ^String %)]])
 
-(defn gen-sentence [n]
-  (take n (repeatedly #(first (shuffle #{"the" "dog" "barks"})))))
-
 (defn load-embeddings [opts]
   (let [factory (no/factory)]
     (embeddings/fixed-embedding
@@ -42,7 +40,7 @@
      (:emb-size opts)
      (-> opts :embed-file io/reader embeddings/read-text-embedding-pairs))))
 
-(defn graph-builder [model word-emb lstm-size num-classes]
+(defn logit-graph-builder [model word-emb lstm-size num-classes]
   (let [emb-size (embeddings/embedding-size word-emb)
         cell (node/with-scope "forward"
                (rnn/lstm-cell model emb-size lstm-size))
@@ -52,41 +50,68 @@
         hidden-size (* 2 lstm-size)
         hidden->logits (model/add-params! model [num-classes hidden-size]
                                           :name  "hidden->logits")]
-    (fn [[sent tag]]
-      (let [inputs (embeddings/sent-nodes factory word-emb sent)
-            [fwd-outputs _] (rnn/build-seq cell inputs)
-            [rev-outputs _] (rnn/build-seq rev-cell (reverse inputs))
-            concat-hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))
-            logits (cg/* hidden->logits concat-hidden)]
+    (fn [sent]
+      (let [inputs (embeddings/sent-nodes factory word-emb sent)]
         (when (seq inputs)
-            (cg/cross-entropy-loss
-             logits
-             (node/constant "tag" factory [tag])))))))
+          (let [[fwd-outputs _] (rnn/build-seq cell inputs)
+                [rev-outputs _] (rnn/build-seq rev-cell (reverse inputs))
+                concat-hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))
+                logits (cg/* hidden->logits concat-hidden)]
+            logits))))))
+
+#_(defn logit-graph-builder [model word-emb lstm-size num-classes]
+  (let [emb-size (embeddings/embedding-size word-emb)
+        factory (model/tensor-factory model)
+        hidden->logits (model/add-params! model [num-classes emb-size]
+                                          :name  "hidden->logits")]
+    (fn [sent]
+      (let [inputs (embeddings/sent-nodes factory word-emb sent)]
+        (when (seq inputs)
+          (cg/* hidden->logits (apply cg/+ inputs)))))))
+
+(defn loss-node [factory predict-node label]
+  (when predict-node
+    (cg/cross-entropy-loss
+     predict-node
+     (node/constant "label" factory [label]))))
 
 (defn load-data [path]
   (for [line (line-seq (io/reader path))
         :let [[tag & sent] (.split (.trim ^String line) " ")]]
-    [sent (Integer/parseInt tag)]))
+    [sent (double (Integer/parseInt tag))]))
 
 (defn train [opts]
-  (let [all-data (take (:num-data opts) (load-data (:train-file opts)))
+  (let [train-data (take (:num-data opts) (load-data (:train-file opts)))
+        test-data (take (:num-data opts) (load-data (:test-file opts)))
         emb (load-embeddings opts)
-        gen-batches #(partition 32 all-data)
+        gen-batches #(partition-all 1000 train-data)
         factory (no/factory)
         m (model/simple-param-collection factory)
         ;; need to provide forward-computed graph for loss
-        gb (comp
-            (fn [n] (compute/forward-pass! n factory))
-            (graph-builder m emb (:lstm-size opts) (:num-classes opts)))
-        train-opts {:num-iters 100 :learning-rate 0.01}]
-    (train/sgd! m gb gen-batches train-opts)))
+        get-logit-node (logit-graph-builder m emb (:lstm-size opts) (:num-classes opts))
+        gb (fn [[sent tag]]
+             (when-let [logits (get-logit-node sent)]
+               (compute/forward-pass!
+                (loss-node factory logits tag)
+                factory)))
+        train-opts {:num-iters 100
+                    :iter-reporter (report/test-accuracy
+                                    (constantly train-data)
+                                    (fn [x]
+                                      (when-let [l (get-logit-node x)]
+                                        (compute/forward-pass!
+                                         (cg/arg-max l)  factory))))
+                    :learning-rate 0.01}]
+    (train/train! m gb gen-batches train-opts)))
 
 (comment
   (do
     (def opts {:embed-file "data/small-glove.50d.txt"
                :lstm-size 25
                :num-classes 2
-               :train-file "data/sentiment-10k.txt"
+               :num-data 1000
+               :train-file "data/sentiment-train10k.txt"
+               :test-file "data/sentiment-test10k.txt"
                :emb-size 50})
     (def factory (no/factory))
     (def emb (load-embeddings opts))

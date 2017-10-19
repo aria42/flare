@@ -9,14 +9,11 @@
   (graph
     [this]
     [this input]
-    [this input1 input2]))
+    [this input1 input2]
+    "build a graph for any input(s)"))
 
 (defprotocol ModelModule
-  (-params [this])
-  (predict-graph
-    [this]
-    [this input]
-    [this input1 input2]))
+  (-params [this] "map of unscoped parameter keys -> param-node"))
 
 (defprotocol InputModule
   (-required-inputs [this]))
@@ -32,9 +29,9 @@
 (defn from-op [op]
   (reify Module
     (graph [this input]
-      (cg/add-graph-op
-       op
-       [input]))))
+      (cg/add-graph-op op [input]))
+    (graph [this input1 input2]
+      (cg/add-graph-op op [input1 input2]))))
 
 (defn comp [& ms]
   (reify
@@ -46,12 +43,7 @@
        (reverse ms)))
 
     ModelModule
-    (-params [this] (mapcat params ms))
-    (predict-graph [this input]
-      (reduce
-       (fn [result m] (graph m result))
-       input
-       (reverse ms)))
+    (-params [this] (merge params ms))
 
     InputModule
     (-required-inputs [this] (mapcat required-inputs ms))))
