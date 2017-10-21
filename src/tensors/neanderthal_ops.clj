@@ -489,5 +489,5 @@
   (let [f (->Factory)]
     (with-meta f
       {:cache (cache-pool/make
-               (or num-to-cache 100)
+               (or num-to-cache 1)
                (fn [shape] (tensors/zeros f shape)))})))

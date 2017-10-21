@@ -10,7 +10,8 @@
             [tensors.model :as model]
             [tensors.report :as report]
             [tensors.computation-graph :as cg]
-            [tensors.train :as train]))
+            [tensors.train :as train]
+            [tensors.module :as module]))
 
 (defn build-graph [words embed rnn-cell])
 
@@ -40,7 +41,7 @@
      (:emb-size opts)
      (-> opts :embed-file io/reader embeddings/read-text-embedding-pairs))))
 
-(defn logit-graph-builder [model word-emb lstm-size num-classes]
+(defn lstm-sent-classifier [model word-emb lstm-size num-classes]
   (let [emb-size (embeddings/embedding-size word-emb)
         cell (node/with-scope "forward"
                (rnn/lstm-cell model emb-size lstm-size))
@@ -48,32 +49,22 @@
                    (rnn/lstm-cell model emb-size lstm-size))
         factory (model/tensor-factory model)
         hidden-size (* 2 lstm-size)
-        hidden->logits (model/add-params! model [num-classes hidden-size]
-                                          :name  "hidden->logits")]
-    (fn [sent]
-      (let [inputs (embeddings/sent-nodes factory word-emb sent)]
-        (when (seq inputs)
+        hidden->logits (node/with-scope "hidden->logits"
+                         (module/affine model num-classes [hidden-size]))]
+    (reify
+      module/Module
+      ;; build logits
+      (graph [this sent]
+        (when-let [inputs (seq (embeddings/sent-nodes factory word-emb sent))]
           (let [[fwd-outputs _] (rnn/build-seq cell inputs)
                 [rev-outputs _] (rnn/build-seq rev-cell (reverse inputs))
-                concat-hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))
-                logits (cg/* hidden->logits concat-hidden)]
-            logits))))))
-
-#_(defn logit-graph-builder [model word-emb lstm-size num-classes]
-  (let [emb-size (embeddings/embedding-size word-emb)
-        factory (model/tensor-factory model)
-        hidden->logits (model/add-params! model [num-classes emb-size]
-                                          :name  "hidden->logits")]
-    (fn [sent]
-      (let [inputs (embeddings/sent-nodes factory word-emb sent)]
-        (when (seq inputs)
-          (cg/* hidden->logits (apply cg/+ inputs)))))))
-
-(defn loss-node [factory predict-node label]
-  (when predict-node
-    (cg/cross-entropy-loss
-     predict-node
-     (node/constant "label" factory [label]))))
+                concat-hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))]
+            (module/graph hidden->logits concat-hidden))))
+      ;; build loss node
+      (graph [this sent label]
+        (when-let [logits (module/graph this sent)]
+          (let [label-node (node/constant "label" factory [label])]
+            (cg/cross-entropy-loss logits label-node)))))))
 
 (defn load-data [path]
   (for [line (line-seq (io/reader path))
@@ -88,28 +79,25 @@
         factory (no/factory)
         m (model/simple-param-collection factory)
         ;; need to provide forward-computed graph for loss
-        get-logit-node (logit-graph-builder m emb (:lstm-size opts) (:num-classes opts))
+        classifier (lstm-sent-classifier m emb (:lstm-size opts) (:num-classes opts))
         gb (fn [[sent tag]]
-             (when-let [logits (get-logit-node sent)]
-               (compute/forward-pass!
-                (loss-node factory logits tag)
-                factory)))
+             (module/forward! factory classifier sent tag))
         train-opts {:num-iters 100
                     :iter-reporter (report/test-accuracy
                                     (constantly train-data)
-                                    (fn [x]
-                                      (when-let [l (get-logit-node x)]
-                                        (compute/forward-pass!
-                                         (cg/arg-max l)  factory))))
+                                    (fn [sent]
+                                      (module/predict factory classifier sent)))
                     :learning-rate 0.01}]
+    (println "Params " (map first (seq m)))
+    (println "Total " (model/total-num-params m))
     (train/train! m gb gen-batches train-opts)))
 
 (comment
   (do
     (def opts {:embed-file "data/small-glove.50d.txt"
-               :lstm-size 25
+               :lstm-size 10
                :num-classes 2
-               :num-data 1000
+               :num-data 100
                :train-file "data/sentiment-train10k.txt"
                :test-file "data/sentiment-test10k.txt"
                :emb-size 50})

@@ -69,7 +69,8 @@
 (def +zero+ (Double. 0.0))
 
 (defn ensure-tensor! [^Node node key factory]
-  (let [cache (-> factory meta :cache)
+  (assoc node )
+  #_(let [cache (-> factory meta :cache)
         [t return-fn] (cache-pool/get-obj cache (.shape node))
         return-fn #(return-fn t)]
     (when (identical? key :grad)

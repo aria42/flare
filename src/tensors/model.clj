@@ -5,7 +5,8 @@
             [tensors.core :as tensors]
             [tensors.cache-pool :as cache-pool]
             [tensors.model :as model]
-            [tensors.node :as node]))
+            [tensors.node :as node]
+            [plumbing.core :as p]))
 
 (s/defschema InitParamSpec
   "Spec for how to generate parameter entries independently
@@ -42,6 +43,9 @@
   (canonical-node [this param-name]
     "returns a caonical `Node` for the parameter. If parameters
      have been initialized, also returns `:value` and `:grad` tensor fields"))
+
+(defn total-num-params [model]
+  (p/sum (fn [[_ p]] (apply * (:shape p))) model))
 
 (defprotocol -TestPModel
   "only for testing with models"

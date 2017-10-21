@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [comp])
   (:require [tensors.node :as node]
             [tensors.model :as model]
-            [tensors.computation-graph :as cg])
+            [tensors.computation-graph :as cg]
+            [tensors.compute :as compute])
   (:import [tensors.node Node]))
 
 (defprotocol Module
@@ -17,6 +18,14 @@
 
 (defprotocol InputModule
   (-required-inputs [this]))
+
+(defn forward! [factory module & inputs]
+  (let [n (apply graph module inputs)]
+    (compute/forward-pass! n factory)))
+
+(defn predict [factory score-module & inputs]
+  (when-let [n (apply graph score-module inputs)]
+       (compute/forward-pass! (cg/arg-max n) factory)))
 
 (defn params [module]
   (when (satisfies? ModelModule module)
