@@ -69,7 +69,7 @@
 (def +zero+ (Double. 0.0))
 
 (defn ensure-tensor! [^Node node key factory]
-  (assoc node )
+  (assoc node key (tensors/zeros factory (.shape node)))
   #_(let [cache (-> factory meta :cache)
         [t return-fn] (cache-pool/get-obj cache (.shape node))
         return-fn #(return-fn t)]
@@ -80,7 +80,8 @@
         (with-meta (assoc (meta node) (return-key key) return-fn)))))
 
 (defn release-tensor! [node key]
-  (when-let [return-fn (-> node meta (get (return-key key)))]
+  (dissoc node key)
+  #_(when-let [return-fn (-> node meta (get (return-key key)))]
     (return-fn)))
 
 (defn with-tensors [^Node node factory]
