@@ -8,15 +8,6 @@
             [tensors.core :as tensors]
             [tensors.compute :as compute]))
 
-(deftest -affine-test
-  (let [factory (no/factory)
-        model (model/simple-param-collection factory)
-        affine (-affine-transform "scope" model 50 10)]
-    (is (= #{"scope/W" "scope/b"} (set (map first (seq model)))))
-    (let [output (affine (node/constant factory (repeat 60 1)))]
-      (is (= (:shape output) [10]))
-      (is (:value (compute/forward-pass! output factory))))))
-
 (deftest lstm-cell-test
   (let [factory (no/factory)
         m (model/simple-param-collection factory)

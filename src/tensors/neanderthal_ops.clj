@@ -26,6 +26,13 @@
     (throw (ex-info "Must use a vector (1d) or matrix (2d) shape"
                     {:shape shape}))))
 
+(defn -zeros [shape]
+  (case (count shape)
+    1 (dv (first shape))
+    2 (-mk-matrix (first shape) (second shape))
+    (throw (ex-info "Unallowed shape for neanderthal"
+                    {:shape (vec shape)}))))
+
 (defrecord SumTensorOp []
   compute/TensorOp
   (ensure-valid?! [this input-nodes]
@@ -441,12 +448,6 @@
         (swap! *cached-zeros assoc shape z)
         (copy! z t)))))
 
-(defn -zeros [shape]
-  (case (count shape)
-    1 (dv (first shape))
-    2 (-mk-matrix (first shape) (second shape))
-    (throw (ex-info "Unallowed shape for neanderthal"
-                    {:shape (vec shape)}))))
 
 (defrecord Factory []
   tensors/PFactory

@@ -36,12 +36,6 @@
     (let [data {:expected expected-shape :given given-shape :key key}]
       (throw (ex-info "Got unexpected shape" data)))))
 
-(defn with-cache [factory num-to-cache]
-  (with-meta factory
-    {:cache (cache-pool/make
-             (or num-to-cache 100)
-             (fn [shape] (zeros factory shape)))}))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Tensor Factory
@@ -72,3 +66,9 @@
   (grad-step! [this weight alpha grad])
   (copy-from-input! [this tensor! nums])
   (shape [this t]))
+
+(defn with-cache [factory num-to-cache]
+  (with-meta factory
+    {:cache (cache-pool/make
+             (or num-to-cache 100)
+             (fn [shape] (zeros factory shape)))}))

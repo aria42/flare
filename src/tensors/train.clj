@@ -96,6 +96,6 @@
   (let [factory (model/tensor-factory model)]
     (train!
      model
-     (fn [input->vals] (compute/forward-pass! loss-node factory input->vals))
+     (fn [input->vals] (compute/with-inputs factory loss-node input->vals))
      data-gen
      opts)))
