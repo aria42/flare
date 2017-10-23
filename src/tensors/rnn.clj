@@ -11,24 +11,6 @@
   (output-dim [this])
   (add-input! [this input last-output last-state]))
 
-(s/defn simple-lstm-cell
-  [m :- model/PModel input-dim :- s/Int hidden-dim :- s/Int]
-  (node/with-scope "lstm"
-    (let [mk-affine (fn [scope]
-                      (node/with-scope scope
-                        (module/affine m hidden-dim [(+ input-dim hidden-dim)])))
-          gate (node/with-scope "gate"
-                 (module/affine m hidden-dim [input-dim]))]
-      (reify RNNCell
-        (cell-model [this] m)
-        (output-dim [this] hidden-dim)
-        (add-input! [this input last-output last-state]
-         (tensors/validate-shape! :lstm-input [input-dim] (:shape input))
-         (tensors/validate-shape! :lstm-hidden [hidden-dim] (:shape last-state))
-         (let [x input
-               state (module/graph gate x)]
-           [state state]))))))
-
 (s/defn lstm-cell
   [m :- model/PModel input-dim :- s/Int hidden-dim :- s/Int]
   (node/with-scope "lstm"

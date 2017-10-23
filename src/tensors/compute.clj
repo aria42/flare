@@ -145,7 +145,6 @@
   ([^Node target factory] (forward-pass! target factory {}))
   ([^Node target factory input->vals]
    (let [nodes (graph/topographic target)
-         _ nil #_(println "order: " (map :ref-name nodes))
          computed-nodes (java.util.HashMap. (count nodes))
          get-canonical (fn [^Node node] (.get computed-nodes (.ref-name node)))]
      (validate-input-keys nodes input->vals)
@@ -161,7 +160,6 @@
            (let [node (assoc onode :children new-children)
                  ^Node node (-compile-hack node factory input->vals)
                  ^Node node (-forward-intrnal node)]
-             #_(println "computed" (.ref-name node) " value " (:value node))
              (.put computed-nodes (.ref-name node) node)))))
      (.get computed-nodes (.ref-name target)))))
 

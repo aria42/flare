@@ -15,7 +15,7 @@
   (clear! [this])
   (gen [this]))
 
-(defn test-accuracy [get-data get-pred-node]
+(defn test-accuracy [k get-data get-pred-node]
   (reify Reporter
     (update! [this info])
     (clear! [this])
@@ -28,7 +28,7 @@
                            [(if correct? (inc num-correct) num-correct)
                             (inc total)])
                          [0 0]))]
-        {:test-accuracy {:acc (/ (double num-correct) total) :n total}}))))
+        {k {:acc (/ (double num-correct) total) :n total}}))))
 
 (defn avg-loss []
   (let [sum (atom 0.0)
