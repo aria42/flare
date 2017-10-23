@@ -18,20 +18,22 @@
 (def cli-options
   ;; An option with a required argument
   [["-d" "--train-file PATH" "path to data"
-    :default "data/sentiment-10k.txt"]
+    :default "data/sentiment-train10k.txt"]
+   ["-sss" "--test-file PATH" "path to test"
+    :default "data/sentiment-test10k.txt"]
    ["-e" "--embed-file PATH" "path to data"
-    :default "data/small-glove.50d.txt"]
+    :default "data/small-glove.100d.txt"]
    ["-n" "--num-classes PATH" "path to data"
     :default 2
     :parse-fn #(Integer/parseInt ^String %)]
    ["-s" "--emb-size NUM" "size of embedding data"
-    :default 50
+    :default 100
     :parse-fn #(Integer/parseInt ^String %)]
    ["-l" "--lstm-size NUM" "lstm size"
     :default 25
     :parse-fn #(Integer/parseInt ^String %)]
    ["-x" "--num-data DATA"
-    :default 10000
+    :default 2000
     :parse-fn #(Integer/parseInt ^String %)]])
 
 (defn load-embeddings [opts]
@@ -126,4 +128,5 @@
 
 (defn -main [& args]
   (let [parse (parse-opts args cli-options)]
+    (println (:options parse))
     (train (:options parse))))
