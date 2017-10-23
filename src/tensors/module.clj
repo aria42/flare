@@ -36,6 +36,8 @@
     (-required-inputs module)))
 
 (defn from-op [op]
+  (when-not (satisfies? cg/GraphOp op)
+    (throw (ex-info "Must be graph-op" {:op op})))
   (reify Module
     (graph [this input]
       (cg/add-graph-op op [input]))

@@ -175,11 +175,11 @@
 (deftest hadamard-test
   (testing "base hadamard test"
     (let [out (dv 3)]
-      (hadamard out (dv [1 2 3]) (dv [1 2 2]))
+      (hadamard out (dv [1 2 3]) (dv [1 2 2]) false)
       (is out (dv [1 4 6])))
     (let [out (dge 2 2)
           x (dge 2 2 [1 2 3 4])]
-      (hadamard out x x)
+      (hadamard out x x false)
       (is (= out (dge 2 2 [1 4 9 16])))))
   (testing "hadamard op test"
     (let [op (->HadamardTensorOp)

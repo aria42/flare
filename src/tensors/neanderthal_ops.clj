@@ -14,6 +14,10 @@
   (:import [tensors.node Node]
            [clojure.lang IFn$DD IFn$ODD IFn$DDD IFn$ODDD]))
 
+(defn -mk-matrix 
+  ([rows cols] (dge rows cols {:layout :row}))
+  ([rows cols data] (dge rows cols (flatten data) {:layout :row})))
+
 (defn ^:private valid-shape? [shape]
   (<= (count shape) 2))
 
@@ -32,7 +36,8 @@
           inputs (mapv #(.value ^Node %) (.children node))]
       (copy! (first inputs) output)
       (doseq [input (rest inputs)]
-        (np/axpy! 1.0 input output)))
+        ;; output += input
+        (np/axpy! input output)))
     node)
   (prep [this node]
     node)
@@ -44,6 +49,7 @@
           df_dt (.grad node)
           input-grads (map #(.grad ^Node %) (.children node))]
       (doseq [input-grad input-grads :when input-grad]
+        ;; input-grad += df_dt
         (np/axpy! df_dt input-grad)))
     node))
 
@@ -63,6 +69,7 @@
           [a b] (map #(.value ^Node %) (.children node))]
       ;; mm!/mv! will add, so need to clear first
       (if (vctr? b)
+        ;; out = a b
         (mv! 1.0 a b 0.0 out)
         (mm! 1.0 a b 0.0 out)))
     node)
@@ -79,10 +86,12 @@
       ;; update dX
       (when dX
         (if (matrix? Y)
-          (np/mm! 1.0 dZ (trans Y) 1.0 dX)
-          (np/mm! 1.0 (view-ge dZ) (trans (view-ge Y)) 1.0 dX)))
+          ;; dX += dZ Y'
+          (np/mm! 1.0 dZ (trans Y) dX)
+          (np/mm! 1.0 (view-ge dZ) (trans (view-ge Y)) dX)))
       ;; update dY
       (when dY
+        ;; dY += X' dZ
         (if (matrix? Y)
           (np/mm! 1.0 (trans X) dZ dY)
           (np/mv! 1.0 (trans X) dZ dY))))
@@ -106,7 +115,7 @@
           cached (:batched-cache (first nodes))
           new-input (if cached
                       (first cached)
-                      (dge num-rows num-cols))]
+                      (-mk-matrix num-rows num-cols))]
       (when-not (= m-ref (:ref-name M))
         (throw (ex-info "Bad M ref" {:m-ref m-ref :M M})))
       ;; copy columns to new matrix
@@ -117,7 +126,8 @@
                        (submatrix new-input 0 j num-rows 1))
             (recur (inc j) (next nodes)))))
       ;; perfrom mm, copy columns to outputs
-      (let [result (if cached (second cached) (dge (-> M :shape first) (count nodes)))]
+      (let [result (if cached (second cached)
+                       (-mk-matrix (-> M :shape first) (count nodes)))]
         (scal! 0.0 result)
         (mm! 1.0 (p/safe-get M :value) new-input 1.0 result)
         (loop [nodes nodes cols (cols result)]
@@ -226,12 +236,14 @@
                       (if (= idx gold-idx) 1.0 0.0)))))))))
     node))
 
-(defn ^:static hadamard [out! x y]
+(defn ^:static hadamard [out! x y reset?]
   (if (vctr? x)
     (alter! out! (fn ^double [^long i ^double cur]
-                   (+ cur (* (real/entry x i) (real/entry y i)))))
+                   (let [val (* (real/entry x i) (real/entry y i))]
+                     (if reset? val (+ cur val)))))
     (alter! out! (fn ^double [^long i ^long j ^double cur]
-                   (+ cur (* (real/entry x i j) (real/entry y i j)))))))
+                   (let [val (* (real/entry x i j) (real/entry y i j))]
+                     (if reset? val (+ cur val)))))))
 
 (defrecord ArgMaxTensorOp []
   compute/TensorOp
@@ -258,7 +270,7 @@
   (forward-node-pass! [this node]
     (let [output (p/safe-get node :value)
           [X Y] (map :value (:children node))]
-      (hadamard output X Y)
+      (hadamard output X Y true)
       node))
   (backward-node-pass! [this node]
     (let [dZ (p/safe-get node :grad)
@@ -266,9 +278,9 @@
           [X Y] (map :value (:children node))
           [dX dY] (map :grad (:children node))]
       (when dX
-        (hadamard dX Y dZ))
+        (hadamard dX Y dZ false))
       (when dY
-        (hadamard dY X dZ)))
+        (hadamard dY X dZ false)))
     node))
 
 (defrecord ConcatTensorOp []
@@ -297,18 +309,18 @@
   (backward-node-pass! [this node]
     (let [output (p/safe-get node :grad)
           inputs (:children node)
-          dim-to-cat (:dim-to-cat (:graph-op node))]
+          dim-to-cat (get-in node [:graph-op :dim-to-cat])]
       (loop [inputs inputs offset 0]
         (when-let [input (first inputs)]
           (let [len (long (nth (:shape input) dim-to-cat))
-                x (:grad input)
+                dx (:grad input)
                 [nr nc] (:shape input)]
-            (when x
-              (if (vctr? x)
-                (np/axpby! (subvector output offset len) x)
+            (when dx
+              (if (vctr? dx)
+                (np/axpby! (subvector output offset len) dx)
                 (if (= dim-to-cat 0)
-                  (np/axpby! (submatrix output offset 0 len nc) x)
-                  (np/axpby! (submatrix output 0 offset nr len) x))))
+                  (np/axpby! (submatrix output offset 0 len nc) dx)
+                  (np/axpby! (submatrix output 0 offset nr len) dx))))
             (recur (next inputs) (+ offset len)))))
       node)))
 
@@ -340,16 +352,20 @@
                                (.invokePrim dfx (real/entry X i j)))))))))
       node)))
 
+(defn ^:private ^:static sigmoid
+  ^double [^double x]
+  (/ 1.0 (+ 1.0 (Math/exp (- x)))))
+
 (def ^:private +elementwise-op+
   ;; f(x) = e^x, df(x) = e^x
   {:exp [(fn -exp ^double [^double x] (Math/exp x))
          (fn -exp-d ^double [^double x] (Math/exp x))]
    ;; f(x) = 1/(1+e^{-x}, df(x) = (sigmoid(x)-1)/sigmoid(x)
    :sigmoid [(fn -sigmoid ^double [^double x]
-               (/ 1.0 (+ 1.0 (Math/exp (- x)))))
+               (sigmoid x))
              (fn -sigmoid-d ^double [^double x]
-               (let [sig (/ 1.0 (+ 1.0 (Math/exp (- x))))]
-                 (/ (- sig 1.0) sig)))]
+               (let [sig (sigmoid x)]
+                 (* sig (- 1.0 sig))))]
    ;; f(x) = tanh(x), df(X) = 1 - tan(x)^2
    :tanh [(fn -tanh ^double [^double x]
             (Math/tanh x))
@@ -375,7 +391,7 @@
   (case (count shape)
     1 (dv nums)
     2 (let [[row col] shape]
-        (dge row col (apply concat nums) {:layout :row}))
+        (-mk-matrix row col nums))
     ;; else
     (throw (ex-info "Unallowed shape" {:shape (vec shape)}))))
 
@@ -481,7 +497,7 @@
   (zeros [this shape]
     (case (count shape)
       1 (dv (first shape))
-      2 (dge (first shape) (second shape))
+      2 (-mk-matrix (first shape) (second shape))
       (throw (ex-info "Unallowed shape for neanderthal"
                       {:shape (vec shape)})))))
 

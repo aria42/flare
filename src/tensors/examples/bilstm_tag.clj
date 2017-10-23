@@ -48,7 +48,8 @@
         rev-cell (node/with-scope "reverse"
                    (rnn/lstm-cell model emb-size lstm-size))
         factory (model/tensor-factory model)
-        hidden-size (* 2 lstm-size)
+        num-dirs 1
+        hidden-size (* num-dirs lstm-size)
         hidden->logits (node/with-scope "hidden->logits"
                          (module/affine model num-classes [hidden-size]))]
     (reify
@@ -57,10 +58,12 @@
       (graph [this sent]
         (when-let [inputs (seq (embeddings/sent-nodes factory word-emb sent))]
           (let [[fwd-outputs _] (rnn/build-seq cell inputs)
-                [rev-outputs _] (rnn/build-seq rev-cell (reverse inputs))
-                concat-hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))]
-            (module/graph hidden->logits concat-hidden))))
-      ;; build loss node
+                ;; [rev-outputs _] (rnn/build-seq rev-cell (reverse inputs))
+                ;; concat-hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))
+                hidden (last fwd-outputs)
+                ]
+            (module/graph hidden->logits hidden))))
+      ;; build loss node for two-arguments
       (graph [this sent label]
         (when-let [logits (module/graph this sent)]
           (let [label-node (node/constant "label" factory [label])]
@@ -72,9 +75,9 @@
     [sent (double (Integer/parseInt tag))]))
 
 (defn train [opts]
-  (let [train-data (take (:num-data opts) (load-data (:train-file opts)))
+  (let [emb (load-embeddings opts)
+        train-data (take (:num-data opts) (load-data (:train-file opts)))
         test-data (take (:num-data opts) (load-data (:test-file opts)))
-        emb (load-embeddings opts)
         gen-batches #(partition-all 1000 train-data)
         factory (no/factory)
         m (model/simple-param-collection factory)
@@ -87,7 +90,7 @@
                                     (constantly train-data)
                                     (fn [sent]
                                       (module/predict factory classifier sent)))
-                    :learning-rate 0.01}]
+                    :learning-rate 1}]
     (println "Params " (map first (seq m)))
     (println "Total " (model/total-num-params m))
     (train/train! m gb gen-batches train-opts)))

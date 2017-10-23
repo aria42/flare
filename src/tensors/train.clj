@@ -67,7 +67,8 @@
     data-gen :- (s/=> [DataBatch])
     opts :- TrainOpts]
    (let [factory (model/tensor-factory model)
-         optimizer (optimize/->Adadelta factory (:learning-rate opts) 0.5 1.0e-3)
+         ;; optimizer (optimize/->Adadelta factory (:learning-rate opts) 0.5 1.0e-3)
+         optimizer (optimize/->SGD factory (:learning-rate opts))
          opts (merge +default-train-opts+ opts)]
      (println "Optimizing with " (type optimizer))
      (optimize/init-model! optimizer model)

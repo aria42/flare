@@ -6,7 +6,8 @@
             [tensors.cache-pool :as cache-pool]
             [tensors.model :as model]
             [tensors.node :as node]
-            [plumbing.core :as p]))
+            [plumbing.core :as p])
+  (:import [java.util Arrays]))
 
 (s/defschema InitParamSpec
   "Spec for how to generate parameter entries independently
@@ -66,6 +67,13 @@
                     param-node-or-name)]
     (-add-param-metadata! model node-name key value)))
 
+(defn rand-params! [model]
+  (doseq [[_ node] (seq model)]
+    (when-let [init (:init node)]
+      (tensors/transform!
+       (tensor-factory model)
+       (p/safe-get  node :value)
+       (get-param-rng init)))))
 
 (s/defn simple-param-collection :- PModel
   "Simple collection of parameters
@@ -118,3 +126,41 @@
         (seq [this]
           (for [e m] [(key e) (val e)])))
       {:data m})))
+
+
+(defn to-doubles
+  "Flatten parameters into a single vector"
+  [model]
+  (let [factory (model/tensor-factory model)
+        xs (double-array (total-num-params model))
+        mapping (into {} (seq model))
+        es (sort-by key mapping)]
+    (loop [es es offset 0]
+      (if-let [e (first es)]
+        (let [[k n] e
+              v (flatten (seq (:value n)))]
+          (System/arraycopy
+           (double-array v)
+           0
+           xs
+           offset
+           (count v))
+          (recur (next es) (+ offset (count v))))
+        xs))))
+
+(defn from-doubles!
+  "Flatten parameters into a single vector"
+  [model ^doubles xs]
+  (when-not (= (alength xs) (total-num-params model))
+    (throw (ex-info "Array doesn't match model size"
+                    {:model-size (total-num-params model)
+                     :array-len (alength xs)})))
+  (let [factory (model/tensor-factory model)
+        es (sort-by first (seq model))]
+    (loop [es es offset 0]
+      (if-let [[k n] (first es)]
+        (let [num-vals (int (apply * (:shape n)))
+              vals (Arrays/copyOfRange xs offset (+ offset num-vals))]
+          (tensors/copy-from-input! factory (:value n) (seq vals))
+          (recur (next es) (+ offset num-vals)))
+        model))))

@@ -3,47 +3,42 @@
             [tensors.model :as model]
             [tensors.core :as tensors]
             [tensors.node :as node]
-            [tensors.computation-graph :as cg]))
+            [tensors.computation-graph :as cg]
+            [tensors.module :as module]))
 
 (defprotocol RNNCell
   (cell-model [this])
   (output-dim [this])
   (add-input! [this input last-output last-state]))
 
-(defn -affine-transform
-  [scope-prefix model input-dim hidden-dim]
-  (node/with-scope scope-prefix
-    (let [W-shape [hidden-dim (+ hidden-dim input-dim)]
-          W (model/add-params! model W-shape :name "W")
-          b (model/add-params! model [hidden-dim] :name "b")]
-      (fn [state]
-        (cg/+ (cg/* W state) b)))))
-
 (s/defn lstm-cell
   [m :- model/PModel input-dim :- s/Int hidden-dim :- s/Int]
   (node/with-scope "lstm"
-    (let [affine (fn [prefix]
-                   (-affine-transform prefix m input-dim hidden-dim))
-          forget-fn (comp cg/sigmoid (affine "forget"))
-          keep-fn (comp cg/sigmoid (affine "keep"))
-          out-fn (comp cg/sigmoid (affine "out"))
-          trans-fn (comp cg/tanh (affine "trans"))]
+    (let [sigmoid (module/from-op (cg/scalar-op :sigmoid))
+          mk-affine (fn [scope]
+                      (node/with-scope scope
+                        (module/affine m hidden-dim [(+ input-dim hidden-dim)])))
+          keep (module/comp sigmoid (mk-affine "keep"))
+          forget (module/comp sigmoid (mk-affine "forget"))
+          output (module/comp sigmoid (mk-affine "output"))
+          tanh (module/from-op (cg/scalar-op :tanh))
+          gate (module/comp tanh (mk-affine "gate"))]
       (reify RNNCell
         (cell-model [this] m)
         (output-dim [this] hidden-dim)
         (add-input! [this input last-output last-state]
          (tensors/validate-shape! :lstm-input [input-dim] (:shape input))
-         (tensors/validate-shape! :lstm-hidden [hidden-dim] (:shape last-output))
-         (let [x (cg/concat 0 last-output input)
-               forgot-probs (forget-fn x)
-               keep-probs (keep-fn x)
-               out-probs (out-fn x)
-               state (trans-fn x)
+         (tensors/validate-shape! :lstm-hidden [hidden-dim] (:shape last-state))
+         (let [x (cg/concat 0 input last-output)
+               forgot-probs (module/graph forget x)
+               keep-probs (module/graph keep x)
+               output-probs (module/graph output x)
+               state (module/graph gate x)
                ;; combine hadamard of forget past, keep present
                state (cg/+
                       (cg/hadamard forgot-probs last-state)
                       (cg/hadamard keep-probs state))
-               output (cg/hadamard out-probs (cg/tanh state))]
+               output (cg/hadamard output-probs (cg/tanh state))]
            [output state]))))))
 
 
@@ -62,4 +57,4 @@
           (recur (next inputs) (cons output outputs) (cons state states)))
         ;; states/outputs are built in reverse and initial state is
         ;; just so the math works out
-        [(->> outputs reverse (drop 1)) (->> states reverse (drop 1))]))))
+        [(->> outputs reverse rest) (->> states reverse rest)]))))
