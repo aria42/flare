@@ -112,7 +112,7 @@
         (loop [sum-loss 0.0 data data]
           (if-let [x (first data)]
             (when-let [g (build-graph x)]
-              (let [n (compute/forward-pass! g factory)
+              (let [n (compute/forward-pass! (compute/with-model-params model g) factory)
                     loss (first (:value n))]
                 ;; accumulate gradient
                 (assoc n :grad (tensors/copy-from-input! factory (:grad n) [1]))
@@ -120,24 +120,48 @@
                 (recur (+ sum-loss loss) (next data))))
             [sum-loss (model/to-doubles model :grad)]))))))
 
+(defn rand-bump-test [diff-fn ^doubles xs]
+  (let [n (alength xs)
+        rng #(- (* 2.0 (rand)) 1.0)
+        dir (repeatedly (alength xs) rng)
+        [fx grad] (val-at diff-fn xs)
+        get-bump (fn [alpha] (map (fn [x d] (+ x (* alpha d))) xs dir))
+        expected (reduce + (map * dir grad))]
+    (println "Start bump " [fx grad])
+    (loop [eps 0.5]
+      (let [[plus-x _] (val-at diff-fn (double-array (get-bump eps)))
+            [neg-x _] (val-at diff-fn (double-array (get-bump (- eps))))
+            approx (/ (- plus-x neg-x) (* 2 eps))
+            delta (Math/abs (- approx expected))]
+        (println {:approx approx :expected expected :plus-x plus-x :neg-x neg-x})
+        (printf "At eps %.3f, delta is %.4f\n" eps delta)
+        (when (> delta 0.0001)
+          (if (< eps 1.0e-10)
+            (throw (ex-info "Backtrack underflow" {:eps eps}))
+            (recur (* eps 0.5))))))))
+
+(defn inner-bump-test [i diff-fn ^doubles xs]
+  (let [n (alength xs)
+        rng #(- (* 2.0 (rand)) 1.0)
+        dir (map #(if (= i %) 1 0) (range n))
+        [fx grad] (val-at diff-fn xs)
+        get-bump (fn [alpha] (map (fn [x d] (+ x (* alpha d))) xs dir))
+        expected (reduce + (map * dir grad))]
+    (println "Start bump " [fx grad])
+    (loop [eps 0.5]
+      (let [[plus-x _] (val-at diff-fn (double-array (get-bump eps)))
+            [neg-x _] (val-at diff-fn (double-array (get-bump (- eps))))
+            approx (/ (- plus-x neg-x) (* 2 eps))
+            delta (Math/abs (- approx expected))]
+        (println {:approx approx :expected expected :plus-x plus-x :neg-x neg-x})
+        (printf "At eps %.3f, delta is %.4f\n" eps delta)
+        (when (> delta 0.0001)
+          (if (< eps 1.0e-10)
+            (throw (ex-info "Backtrack underflow" {:eps eps}))
+            (recur (* eps 0.5))))))))
 
 (defn bump-test
-  ([diff-fn ^doubles xs ^double tol]
-   (let [rand (java.util.Random. 0)
-         n (alength xs)
-         rng #(- (* 2.0 (.nextDouble rand)) 1.0)
-         dir (double-array (take n (repeatedly rng)))
-         [fx grad] (val-at diff-fn xs)
-         get-bump (fn [alpha] (map (fn [x d] (+ x (* alpha d))) xs dir))
-         expected (reduce + (map * dir grad))]
-     (loop [eps 1.0]
-       (let [[plus-x _] (val-at diff-fn (double-array (get-bump eps)))
-             [neg-x _] (val-at diff-fn (double-array (get-bump (- eps))))
-             approx (/ (- plus-x neg-x) (* 2 eps))
-             delta (Math/abs (- approx expected))]
-         (println {:approx approx :expected expected :plus-x plus-x :neg-x neg-x})
-         (printf "At eps %.3f, delta is %.4f\n" eps delta)
-         (when (> delta 0.0001)
-           (if (< eps 1.0e-10)
-             (throw (ex-info "Backtrack underflow" {:eps eps}))
-             (recur (* eps 0.1)))))))))
+  ([diff-fn ^doubles xs]
+   (dotimes [i (alength xs)]
+     (println "on i " i)
+     (inner-bump-test i diff-fn xs))))

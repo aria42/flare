@@ -101,7 +101,7 @@
                          :factory factory
                          :shape shape
                          :init init-spec})
-                  get-param-val (get-param-rng init-spec)]
+                  get-param-val (get-param-rng (assoc init-spec :rand-seed (hash param-name)))]
               ;; initialize param vals from init-spec
               (tensors/transform! factory (:value node) get-param-val)
               (.put m param-name node)
@@ -111,7 +111,10 @@
                 n (with-meta n (assoc (meta n) key val))]
             (.put m param-name n)
             n))
-        (canonical-node [this param-or-name] (.get m param-or-name))
+        (canonical-node [this param-or-name]
+          (if-let [v (.get m param-or-name)]
+            v
+            (throw (ex-info "Non-existtant param" {:key param-or-name}))))
 
         -TestPModel
         (fix-param! [this param-or-name tensor-like]
@@ -136,8 +139,7 @@
      (throw (ex-info "Key must be {:grad, :value}" {:key key})))
    (let [factory (model/tensor-factory model)
          xs (double-array (total-num-params model))
-         mapping (into {} (seq model))
-         es (sort-by key mapping)]
+         es (sort-by first (seq model))]
      (loop [es es offset 0]
        (if-let [e (first es)]
          (let [[k n] e

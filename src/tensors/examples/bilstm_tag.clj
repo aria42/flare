@@ -41,14 +41,44 @@
      (:emb-size opts)
      (-> opts :embed-file io/reader embeddings/read-text-embedding-pairs))))
 
-(defn lstm-sent-classifier [model word-emb lstm-size num-classes]
+(defn stupid-lstm-sent-classifier [model word-emb lstm-size num-classes]
   (let [emb-size (embeddings/embedding-size word-emb)
-        cell (node/with-scope "forward"
-              (rnn/lstm-cell model emb-size lstm-size))
+        cell nil #_(node/with-scope "simple-forward"
+                 (rnn/simple-lstm-cell model emb-size lstm-size))
         ;; rev-cell (node/with-scope "reverse"
         ;;           (rnn/lstm-cell model emb-size lstm-size))
         factory (model/tensor-factory model)
         num-dirs 1
+        hidden-size (* num-dirs lstm-size)
+        hidden->logits (node/with-scope "hidden->logits"
+                         (module/affine model num-classes [emb-size]))]
+    (reify
+      module/Module
+      ;; build logits
+      (graph [this sent]
+        (when-let [inputs (seq (embeddings/sent-nodes factory word-emb sent))]
+          (let [
+                ;;[fwd-outputs _] (rnn/build-seq cell inputs)
+                ;; [rev-outputs _] (rnn/build-seq rev-cell (reverse inputs))
+                ;; concat-hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))
+                ;; hidden (last fwd-outputs)
+                ]
+            (module/graph hidden->logits (last inputs))
+            #_(module/graph hidden->logits hidden))))
+      ;; build loss node for two-arguments
+      (graph [this sent label]
+        (when-let [logits (module/graph this sent)]
+          (let [label-node (node/constant "label" factory [label])]
+            (cg/cross-entropy-loss logits label-node)))))))
+
+(defn lstm-sent-classifier [model word-emb lstm-size num-classes]
+  (let [emb-size (embeddings/embedding-size word-emb)
+        cell (node/with-scope "simple-forward"
+                 (rnn/lstm-cell model emb-size lstm-size))
+        rev-cell (node/with-scope "reverse"
+                   (rnn/lstm-cell model emb-size lstm-size))
+        factory (model/tensor-factory model)
+        num-dirs 2
         hidden-size (* num-dirs lstm-size)
         hidden->logits (node/with-scope "hidden->logits"
                          (module/affine model num-classes [hidden-size]))]
@@ -57,11 +87,12 @@
       ;; build logits
       (graph [this sent]
         (when-let [inputs (seq (embeddings/sent-nodes factory word-emb sent))]
-          (let [[fwd-outputs _] (rnn/build-seq cell inputs)
-                ;; [rev-outputs _] (rnn/build-seq rev-cell (reverse inputs))
-                ;; concat-hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))
-                hidden (last fwd-outputs)
+          (let [
+                [fwd-outputs _] (rnn/build-seq cell inputs)
+                [rev-outputs _] (rnn/build-seq rev-cell (reverse inputs))
+                hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))
                 ]
+            #_(module/graph hidden->logits (last inputs))
             (module/graph hidden->logits hidden))))
       ;; build loss node for two-arguments
       (graph [this sent label]
@@ -72,7 +103,7 @@
 (defn load-data [path]
   (for [line (line-seq (io/reader path))
         :let [[tag & sent] (.split (.trim ^String line) " ")]]
-    [sent (double (Integer/parseInt tag))]))
+    [(take 5 sent) (double (Integer/parseInt tag))]))
 
 (defn train [opts]
   (let [emb (load-embeddings opts)
@@ -95,6 +126,52 @@
     (println "Total " (model/total-num-params m))
     (train/train! m gb gen-batches train-opts)))
 
+(defn build-test [lstm-classifier-fn]
+  (do
+    (def opts {:embed-file "data/small-glove.50d.txt"
+               :lstm-size 10
+               :num-classes 2
+               :num-data 100
+               :train-file "data/sentiment-train10k.txt"
+               :test-file "data/sentiment-test10k.txt"
+               :emb-size 50})
+    (def factory (no/factory))
+    (def emb (load-embeddings opts))
+    (def model (model/simple-param-collection factory))
+    (def train-data (take (:num-data opts) (load-data (:train-file opts))))
+    (def classifier (lstm-classifier-fn model emb (:lstm-size opts) (:num-classes opts)))
+    (def gb (fn [[sent tag]]
+              (module/graph classifier sent tag)))
+    (require '[tensors.optimize :as optimzie])
+    (def lf (optimize/loss-fn model gb (take 1 train-data)))
+    (def xs (double-array (model/total-num-params model)))
+    {:gb gb :lf lf :xs xs :m model}
+    ))
+
+(defn do-bump-test []
+  (do
+    (def opts {:embed-file "data/small-glove.50d.txt"
+               :lstm-size 10
+               :num-classes 2
+               :num-data 100
+               :train-file "data/sentiment-train10k.txt"
+               :test-file "data/sentiment-test10k.txt"
+               :emb-size 50})
+    (def factory (no/factory))
+    (def emb (load-embeddings opts))
+    (def model (model/simple-param-collection factory))
+    (def train-data (take (:num-data opts) (load-data (:train-file opts))))
+    (def classifier (lstm-sent-classifier model emb (:lstm-size opts) (:num-classes opts)))
+    (def gb (fn [[sent tag]]
+              (module/graph classifier sent tag)))
+    (require '[tensors.optimize :as optimzie])
+    (def lf (optimize/loss-fn model gb (take 1 train-data)))
+    (def xs (double-array (repeat (model/total-num-params model) 0.0))
+      #_(model/to-doubles model))
+    (dotimes [_ 10]
+      (optimize/bump-test lf xs 0))
+    ))
+
 (comment
   (do
     (def opts {:embed-file "data/small-glove.50d.txt"
@@ -111,6 +188,10 @@
     (def classifier (lstm-sent-classifier model emb (:lstm-size opts) (:num-classes opts)))
     (def gb (fn [[sent tag]]
               (module/graph classifier sent tag)))
+    (require '[tensors.optimize :as optimzie])
+    (def lf (optimize/loss-fn model gb (take 1 train-data)))
+    (def xs (model/to-doubles model))
+    #_(optimize/bump-test lf xs 0)
     ))
 
 (defn -main [& args]

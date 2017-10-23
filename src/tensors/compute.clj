@@ -5,7 +5,8 @@
             [plumbing.core :as p]
             [schema.core :as s]
             [clojure.set :as set]
-            [tensors.cache-pool :as cache-pool])
+            [tensors.cache-pool :as cache-pool]
+            [tensors.model :as model])
   (:import [tensors.node Node]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -128,6 +129,15 @@
           forward-node (forward-node-pass! tensor-op node)]
       forward-node)))
 
+(defn with-model-params [model ^Node node]
+  (let [factory (model/tensor-factory model)]
+    (graph/bottom-up-walk
+     node
+     (fn [^Node n]
+       (if (identical? (.type n) :params)
+         (model/canonical-node model (.ref-name n))
+         n)))))
+
 (defn forward-pass!
   "forward-pass will topographic walk through graph writing to `:value`
   key on all compiled nodes. You can then look up and retrieve the tensors
@@ -135,6 +145,7 @@
   ([^Node target factory] (forward-pass! target factory {}))
   ([^Node target factory input->vals]
    (let [nodes (graph/topographic target)
+         _ nil #_(println "order: " (map :ref-name nodes))
          computed-nodes (java.util.HashMap. (count nodes))
          get-canonical (fn [^Node node] (.get computed-nodes (.ref-name node)))]
      (validate-input-keys nodes input->vals)
@@ -150,6 +161,7 @@
            (let [node (assoc onode :children new-children)
                  ^Node node (-compile-hack node factory input->vals)
                  ^Node node (-forward-intrnal node)]
+             #_(println "computed" (.ref-name node) " value " (:value node))
              (.put computed-nodes (.ref-name node) node)))))
      (.get computed-nodes (.ref-name target)))))
 
