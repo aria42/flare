@@ -283,6 +283,41 @@
         (hadamard dY X dZ false)))
     node))
 
+(defrecord DropoutTensorOp []
+  compute/TensorOp
+  (ensure-valid?! [this inputs]
+    (doseq [x inputs]
+      (ensure-valid-shape?! (:shape x)))
+    true)
+  (prep [this node]
+    (let [t (-zeros (:shape node))
+          prob (p/safe-get-in node [:graph-op :prob])]
+      (alter! t (fn ^double [^double _]
+                  (if (< (rand) prob)
+                    0.0
+                    1.0)))
+      (assoc node ::dropout-mask t)))
+  (forward-node-pass! [this node]
+    (let [mask (p/safe-get node ::dropout-mask)
+          input (first (:children node))]
+      (hadamard
+       (p/safe-get node :value)
+       mask
+       (p/safe-get input :value)
+       false)
+      node)
+    node)
+  (backward-node-pass! [this node]
+    (let [mask (p/safe-get node ::dropout-mask)
+          input (first (:children node))]
+      (when-let [g (p/safe-get input :grad)]
+        (hadamard
+         g
+         mask
+         (p/safe-get node :grad)
+         false))
+      node)))
+
 (defrecord ConcatTensorOp []
   compute/TensorOp
   (ensure-valid?! [this inputs]
@@ -381,6 +416,7 @@
     :strech ->StrechTensorOp
     :hadamard ->HadamardTensorOp
     :concat ->ConcatTensorOp
+    :dropout ->DropoutTensorOp
     :cross-entropy-loss ->CrossEntropyLossTensorOp
     :arg-max ->ArgMaxTensorOp}
    (p/map-vals
@@ -404,6 +440,13 @@
       (let [z (tensors/zeros factory shape)]
         (swap! *cached-zeros assoc shape z)
         (copy! z t)))))
+
+(defn -zeros [shape]
+  (case (count shape)
+    1 (dv (first shape))
+    2 (-mk-matrix (first shape) (second shape))
+    (throw (ex-info "Unallowed shape for neanderthal"
+                    {:shape (vec shape)}))))
 
 (defrecord Factory []
   tensors/PFactory
@@ -495,11 +538,7 @@
                           [(mrows tensor!) (ncols tensor!)])]
               (copy! (-from-nums nums shape) tensor!))))
   (zeros [this shape]
-    (case (count shape)
-      1 (dv (first shape))
-      2 (-mk-matrix (first shape) (second shape))
-      (throw (ex-info "Unallowed shape for neanderthal"
-                      {:shape (vec shape)})))))
+    (-zeros shape)))
 
 (defn factory [& [num-to-cache]]
   (let [f (->Factory)]

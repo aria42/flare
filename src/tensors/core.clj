@@ -1,5 +1,6 @@
 (ns tensors.core
-  (:require [schema.core :as s])
+  (:require [schema.core :as s]
+            [tensors.cache-pool :as cache-pool])
   (:import [java.util Random]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -34,6 +35,12 @@
   (when-not (= expected-shape given-shape)
     (let [data {:expected expected-shape :given given-shape :key key}]
       (throw (ex-info "Got unexpected shape" data)))))
+
+(defn with-cache [factory num-to-cache]
+  (with-meta factory
+    {:cache (cache-pool/make
+             (or num-to-cache 100)
+             (fn [shape] (zeros factory shape)))}))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

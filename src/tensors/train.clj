@@ -33,7 +33,8 @@
     (loop [batch-loss 0.0 batch batch]
       (if-let [data (first batch)]
         (if-let [loss-node (get-loss-node data)]
-          (let [_ (tensors/copy-from-input! factory (:grad loss-node) [1.0])
+          (let [loss-node (compute/forward-pass! loss-node factory)
+                _ (tensors/copy-from-input! factory (:grad loss-node) [1.0])
                 loss-val (->> loss-node :value (tensors/->clj factory) first)]
             ;; side-effect to update gradients
             (compute/backward-pass! loss-node)

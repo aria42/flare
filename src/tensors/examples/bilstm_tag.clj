@@ -59,7 +59,9 @@
         (when-let [inputs (seq (embeddings/sent-nodes factory word-emb sent))]
           (let [[fwd-outputs _] (rnn/build-seq cell inputs)
                 [rev-outputs _] (rnn/build-seq rev-cell (reverse inputs))
-                hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))]
+                train? (:train? (meta this))
+                hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))
+                hidden (if train? (cg/dropout 0.5 hidden) hidden)]
             (module/graph hidden->logits hidden))))
       ;; build loss node for two-arguments
       (graph [this sent label]
@@ -82,7 +84,9 @@
         ;; need to provide forward-computed graph for loss
         classifier (lstm-sent-classifier m emb (:lstm-size opts) (:num-classes opts))
         gb (fn [[sent tag]]
-             (module/forward! factory classifier sent tag))
+             (-> classifier
+                 (with-meta {:train? true})
+                 (module/graph sent tag )))
         train-opts {:num-iters 100
                     :iter-reporter (report/concat
                                     (report/test-accuracy :train-accuracy
@@ -103,7 +107,7 @@
     (def opts {:embed-file "data/small-glove.100d.txt"
                :lstm-size 25
                :num-classes 2
-               :num-data 1000
+               :num-data 2000
                :train-file "data/sentiment-train10k.txt"
                :test-file "data/sentiment-test10k.txt"
                :emb-size 100})

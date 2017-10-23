@@ -70,20 +70,19 @@
 (def +zero+ (Double. 0.0))
 
 (defn ensure-tensor! [^Node node key factory]
-  (assoc node key (tensors/zeros factory (.shape node)))
-  #_(let [cache (-> factory meta :cache)
-        [t return-fn] (cache-pool/get-obj cache (.shape node))
-        return-fn #(return-fn t)]
-    (when (identical? key :grad)
-      (tensors/transform! factory t +zero+))
-    (-> node
-        (assoc key t)
-        (with-meta (assoc (meta node) (return-key key) return-fn)))))
+  (if-let [cache (-> factory meta :cache)]
+    (let [[t return-fn] (cache-pool/get-obj cache (.shape node))]
+      (when (identical? key :grad)
+        (tensors/transform! factory t +zero+))
+      (-> node
+          (assoc key t)
+          (with-meta (assoc (meta node) (return-key key) return-fn))))
+    (assoc node key (tensors/zeros factory (.shape node)))))
 
 (defn release-tensor! [node key]
-  (dissoc node key)
-  #_(when-let [return-fn (-> node meta (get (return-key key)))]
-    (return-fn)))
+  (when-let [return-fn (-> node meta (get (return-key key)))]
+    (return-fn (:value node)))
+  (dissoc node key))
 
 (defn with-tensors [^Node node factory]
   (key-case (.type node)
@@ -137,6 +136,15 @@
        (if (identical? (.type n) :params)
          (model/canonical-node model (.ref-name n))
          n)))))
+
+(defn with-inputs [factory node input->vals]
+  (let [nodes (graph/topographic node)]
+    (validate-input-keys nodes input->vals)
+    (doseq [^Node n nodes]
+      (when (identical? :input (.type n))
+        (let [vals (p/safe-get input->vals (.ref-name n))]
+          (assert (.value n))
+          (tensors/copy-from-input! factory (.value n) vals))))))
 
 (defn forward-pass!
   "forward-pass will topographic walk through graph writing to `:value`

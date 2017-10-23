@@ -232,6 +232,17 @@
           concat-len (reduce clojure.core/+ (map #(nth % dim-to-cat) shapes))]
       (assoc (first shapes) dim-to-cat concat-len))))
 
+(defrecord DropoutGraphOp [prob]
+  GraphOp
+  (op-key [this] :dropout)
+  (op-validate! [this [input-node :as ns]]
+    (when-not  (= (count ns) 1)
+      (throw (ex-info "Require exactly arg"
+                      {:num-args (count ns)}))))
+  (forward-shape [this [input-node]]
+    (:shape input-node))
+  (op-descriptor [this] (format "dropout(%s)" prob)))
+
 (defn scalar-op
   "graph operation of single argument where output is same shape"
   [key]
@@ -272,6 +283,9 @@
 
 (defn tanh [input]
   (add-graph-op (scalar-op :tanh) [input]))
+
+(defn dropout [p input]
+  (add-graph-op (->DropoutGraphOp p) [input]))
 
 (defn hadamard
   "Output is element-wise product of two inputs"
