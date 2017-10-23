@@ -130,23 +130,26 @@
 
 (defn to-doubles
   "Flatten parameters into a single vector"
-  [model]
-  (let [factory (model/tensor-factory model)
-        xs (double-array (total-num-params model))
-        mapping (into {} (seq model))
-        es (sort-by key mapping)]
-    (loop [es es offset 0]
-      (if-let [e (first es)]
-        (let [[k n] e
-              v (flatten (seq (:value n)))]
-          (System/arraycopy
-           (double-array v)
-           0
-           xs
-           offset
-           (count v))
-          (recur (next es) (+ offset (count v))))
-        xs))))
+  ([model] (to-doubles model :value))
+  ([model key]
+   (when-not (#{:grad :value} key)
+     (throw (ex-info "Key must be {:grad, :value}" {:key key})))
+   (let [factory (model/tensor-factory model)
+         xs (double-array (total-num-params model))
+         mapping (into {} (seq model))
+         es (sort-by key mapping)]
+     (loop [es es offset 0]
+       (if-let [e (first es)]
+         (let [[k n] e
+               v (flatten (seq (get n key)))]
+           (System/arraycopy
+            (double-array v)
+            0
+            xs
+            offset
+            (count v))
+           (recur (next es) (+ offset (count v))))
+         xs)))))
 
 (defn from-doubles!
   "Flatten parameters into a single vector"

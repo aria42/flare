@@ -44,9 +44,9 @@
 (defn lstm-sent-classifier [model word-emb lstm-size num-classes]
   (let [emb-size (embeddings/embedding-size word-emb)
         cell (node/with-scope "forward"
-               (rnn/lstm-cell model emb-size lstm-size))
-        rev-cell (node/with-scope "reverse"
-                   (rnn/lstm-cell model emb-size lstm-size))
+              (rnn/lstm-cell model emb-size lstm-size))
+        ;; rev-cell (node/with-scope "reverse"
+        ;;           (rnn/lstm-cell model emb-size lstm-size))
         factory (model/tensor-factory model)
         num-dirs 1
         hidden-size (* num-dirs lstm-size)
@@ -107,13 +107,10 @@
     (def factory (no/factory))
     (def emb (load-embeddings opts))
     (def model (model/simple-param-collection factory))
-    (def cell (rnn/lstm-cell model (:emb-size opts) (:lstm-size opts)))
-    (def sent-words (gen-sentence 5))
-    (def sent-nodes (mapv (fn [w]
-                            (node/constant factory (embeddings/lookup emb w)))
-                          sent-words))
-    (def hiddens (rnn/build-seq cell sent-nodes))
-    (def gb (graph-builder model emb (:lstm-size opts) (:num-classes opts)))
+    (def train-data (take (:num-data opts) (load-data (:train-file opts))))
+    (def classifier (lstm-sent-classifier model emb (:lstm-size opts) (:num-classes opts)))
+    (def gb (fn [[sent tag]]
+              (module/graph classifier sent tag)))
     ))
 
 (defn -main [& args]
