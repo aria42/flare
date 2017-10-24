@@ -71,4 +71,4 @@
   (with-meta factory
     {:cache (cache-pool/make
              (or num-to-cache 100)
-             (fn [shape] (zeros factory shape)))}))
+             (fn [shape] (zeros factory shape)))}))[]

@@ -4,11 +4,13 @@
             [tensors.core :as tensors]
             [tensors.node :as node]
             [tensors.computation-graph :as cg]
-            [tensors.module :as module]))
+            [tensors.module :as module])
+  (:import [tensors.node Node]))
 
 (defprotocol RNNCell
   (cell-model [this])
   (output-dim [this])
+  (input-dim [this])
   (add-input! [this input last-output last-state]))
 
 (s/defn lstm-cell
@@ -26,35 +28,41 @@
       (reify RNNCell
         (cell-model [this] m)
         (output-dim [this] hidden-dim)
+        (input-dim [this] input-dim)
         (add-input! [this input last-output last-state]
-         (tensors/validate-shape! :lstm-input [input-dim] (:shape input))
-         (tensors/validate-shape! :lstm-hidden [hidden-dim] (:shape last-state))
-         (let [x (cg/concat 0 input last-output)
-               forgot-probs (module/graph forget x)
-               keep-probs (module/graph keep x)
-               output-probs (module/graph output x)
-               state (module/graph gate x)
-               ;; combine hadamard of forget past, keep present
-               state (cg/+
-                      (cg/hadamard forgot-probs last-state)
-                      (cg/hadamard keep-probs state))
-               output (cg/hadamard output-probs (cg/tanh state))]
-           [output state]))))))
+          (tensors/validate-shape! :lstm-input [input-dim] (:shape input))
+          (tensors/validate-shape! :lstm-hidden [hidden-dim] (:shape last-state))
+          (let [x (cg/concat 0 input last-output)
+                forgot-probs (module/graph forget x)
+                keep-probs (module/graph keep x)
+                output-probs (module/graph output x)
+                state (module/graph gate x)
+                ;; combine hadamard of forget past, keep present
+                state (cg/+
+                       (cg/hadamard forgot-probs last-state)
+                       (cg/hadamard keep-probs state))
+                output (cg/hadamard output-probs (cg/tanh state))]
+            [output state]))))))
 
 
 (s/defn build-seq
-  [cell :- RNNCell inputs]
-  (let [factory (-> cell cell-model model/tensor-factory)
-        out-dim (output-dim cell)
-        zero  (tensors/zeros factory [out-dim])
-        init-output (node/constant "h0" factory zero)
-        init-state (node/constant "c0" factory  zero)]
-    (loop [inputs inputs outputs (list init-output) states (list init-state)]
-      (if-let [input (first inputs)]
-        (let [last-output (first outputs)
-              last-state (first states)
-              [output state] (add-input! cell input last-output last-state)]
-          (recur (next inputs) (cons output outputs) (cons state states)))
-        ;; states/outputs are built in reverse and initial state is
-        ;; just so the math works out
-        [(->> outputs reverse rest) (->> states reverse rest)]))))
+  ([cell inputs] (build-seq cell inputs false))
+  ([cell :- RNNCell inputs :- [Node] bidrectional? :- s/Bool]
+   (let [factory (-> cell cell-model model/tensor-factory)
+         out-dim (output-dim cell)
+         zero  (tensors/zeros factory [out-dim])
+         init-output (node/constant "h0" factory zero)
+         init-state (node/constant "c0" factory  zero)
+         ;; for bidirectional, concat reversed version of input
+         inputs (if bidrectional?
+                  (map #(cg/concat 0 %1 %2) inputs (reverse inputs))
+                  inputs)]
+     (loop [inputs inputs outputs (list init-output) states (list init-state)]
+       (if-let [input (first inputs)]
+         (let [last-output (first outputs)
+               last-state (first states)
+               [output state] (add-input! cell input last-output last-state)]
+           (recur (next inputs) (cons output outputs) (cons state states)))
+         ;; states/outputs are built in reverse and initial state is
+         ;; just so the math works out
+         [(->> outputs reverse rest) (->> states reverse rest)])))))

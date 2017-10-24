@@ -45,13 +45,12 @@
 
 (defn lstm-sent-classifier [model word-emb lstm-size num-classes]
   (let [emb-size (embeddings/embedding-size word-emb)
-        cell (node/with-scope "simple-forward"
-                 (rnn/lstm-cell model emb-size lstm-size))
-        rev-cell (node/with-scope "reverse"
-                   (rnn/lstm-cell model emb-size lstm-size))
+        ;; for bi-directional
+        input-size (* 2 emb-size)
+        hidden-size (* 2 lstm-size)
+        cell (node/with-scope "layer0"
+               (rnn/lstm-cell model input-size hidden-size))
         factory (model/tensor-factory model)
-        num-dirs 2
-        hidden-size (* num-dirs lstm-size)
         hidden->logits (node/with-scope "hidden->logits"
                          (module/affine model num-classes [hidden-size]))]
     (reify
@@ -59,10 +58,9 @@
       ;; build logits
       (graph [this sent]
         (when-let [inputs (seq (embeddings/sent-nodes factory word-emb sent))]
-          (let [[fwd-outputs _] (rnn/build-seq cell inputs)
-                [rev-outputs _] (rnn/build-seq rev-cell (reverse inputs))
+          (let [[outputs _] (rnn/build-seq cell inputs true)
                 train? (:train? (meta this))
-                hidden (cg/concat 0 (last fwd-outputs) (last rev-outputs))
+                hidden (last outputs)
                 hidden (if train? (cg/dropout 0.5 hidden) hidden)]
             (module/graph hidden->logits hidden))))
       ;; build loss node for two-arguments
@@ -106,13 +104,13 @@
 
 (comment
   (do
-    (def opts {:embed-file "data/small-glove.100d.txt"
-               :lstm-size 25
+    (def opts {:embed-file "data/small-glove.50d.txt"
+               :lstm-size 100
                :num-classes 2
-               :num-data 2000
+               :num-data 1000
                :train-file "data/sentiment-train10k.txt"
                :test-file "data/sentiment-test10k.txt"
-               :emb-size 100})
+               :emb-size 50})
     (def factory (no/factory))
     (def emb (load-embeddings opts))
     (def model (model/simple-param-collection factory))
