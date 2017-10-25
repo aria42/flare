@@ -15,22 +15,22 @@
 
 (def cli-options
   ;; An option with a required argument
-  [["-d" "--train-file PATH" "path to data"
+  [["-train" "--train-file PATH" "path to data"
     :default "data/sentiment-train10k.txt"]
-   ["-sss" "--test-file PATH" "path to test"
+   ["-test" "--test-file PATH" "path to test"
     :default "data/sentiment-test10k.txt"]
    ["-e" "--embed-file PATH" "path to data"
-    :default "data/small-glove.100d.txt"]
-   ["-n" "--num-classes PATH" "path to data"
+    :default "data/glove.6B.300d.txt"]
+   ["-c" "--num-classes PATH" "path to data"
     :default 2
     :parse-fn #(Integer/parseInt ^String %)]
-   ["-s" "--emb-size NUM" "size of embedding data"
-    :default 100
+   ["s" "--emb-size NUM" "size of embedding data"
+    :default 300
     :parse-fn #(Integer/parseInt ^String %)]
-   ["-l" "--lstm-size NUM" "lstm size"
+   ["l" "--lstm-size NUM" "lstm size"
     :default 25
     :parse-fn #(Integer/parseInt ^String %)]
-   ["-x" "--num-data DATA"
+   ["-n"  "--num-data DATA"
     :default 2000
     :parse-fn #(Integer/parseInt ^String %)]])
 
@@ -86,41 +86,31 @@
                  (with-meta {:train? true})
                  (module/graph sent tag )))
         train-opts {:num-iters 100
+                    ;; report train/test accuracy each iter
                     :iter-reporter (report/concat
-                                    (report/test-accuracy :train-accuracy
-                                                          (constantly train-data)
-                                                          (fn [sent]
-                                                            (module/predict factory classifier sent)))
-                                    (report/test-accuracy :test-accuracy
-                                                          (constantly test-data)
-                                                          (fn [sent]
-                                                            (module/predict factory classifier sent))))
+                                    (report/test-accuracy
+                                     :train-accuracy
+                                     (constantly train-data)
+                                     (fn [sent]
+                                       (module/predict factory classifier sent)))
+                                    (report/test-accuracy
+                                     :test-accuracy
+                                     (constantly test-data)
+                                     (fn [sent]
+                                       (module/predict factory classifier sent))))
                     :learning-rate 1}]
     (println "Params " (map first (seq m)))
     (println "Total " (model/total-num-params m))
     (train/train! m gb gen-batches train-opts)))
 
 (comment
-  (do
-    (def opts {:embed-file "data/small-glove.50d.txt"
-               :lstm-size 100
-               :num-classes 2
-               :num-data 100
-               :train-file "data/sentiment-train10k.txt"
-               :test-file "data/sentiment-test10k.txt"
-               :emb-size 50})
-    (def factory (no/factory))
-    (def emb (load-embeddings opts))
-    (def model (model/simple-param-collection factory))
-    (def train-data (take (:num-data opts) (load-data (:train-file opts))))
-    (def classifier (lstm-sent-classifier model emb (:lstm-size opts) (:num-classes opts)))
-    (def gb (fn [[sent tag]]
-              (module/graph classifier sent tag)))
-    (require '[tensors.optimize :as optimzie])
-    #_(def lf (optimize/loss-fn model gb (take 1 train-data)))
-    #_(def xs (model/to-doubles model))
-    #_(optimize/bump-test lf xs 0)
-    ))
+  (def opts {:embed-file "data/small-glove.50d.txt"
+             :lstm-size 100
+             :num-classes 2
+             :num-data 100
+             :train-file "data/sentiment-train10k.txt"
+             :test-file "data/sentiment-test10k.txt"
+             :emb-size 50}))
 
 (defn -main [& args]
   (let [parse (parse-opts args cli-options)]

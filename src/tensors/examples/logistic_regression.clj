@@ -74,7 +74,7 @@
     :parse-fn #(Integer/parseInt %)]
    ["-h" "--help"]])
 
-(do
+(comment
   (def opts {:num-examples 10000
              :num-batch 32
              :num-feats 10

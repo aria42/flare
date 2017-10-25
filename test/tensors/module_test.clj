@@ -6,7 +6,8 @@
             [tensors.neanderthal-ops :as no]
             [tensors.node :as node]
             [tensors.compute :as compute]
-            [tensors.computation-graph :as cg]))
+            [tensors.computation-graph :as cg])
+  (:import [org.apache.commons.math3.util FastMath]))
 
 (deftest affine-test
   (let [factory (no/factory)
@@ -35,8 +36,8 @@
         m (comp t s)
         factory (no/factory)
         x (node/constant factory [1 2])]
-    (is (= [(Math/tanh (/ 1.0 (+ 1.0 (Math/exp -1.0))))
-          (Math/tanh (/ 1.0 (+ 1.0 (Math/exp -2.0)))) ]
+    (is (= [(FastMath/tanh (/ 1.0 (+ 1.0 (FastMath/exp -1.0))))
+          (FastMath/tanh (/ 1.0 (+ 1.0 (FastMath/exp -2.0)))) ]
          (seq
           (:value
            (compute/forward-pass! (graph m x) factory)))))
