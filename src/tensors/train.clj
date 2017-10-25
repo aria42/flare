@@ -28,26 +28,25 @@
    :grad-clip 10.0
    :learning-rate 0.01})
 
-(defn run-batch! [model get-loss-node batch]
-  (let [factory (model/tensor-factory model)]
-    (loop [batch-loss 0.0 batch batch]
-      (if-let [data (first batch)]
-        (if-let [loss-node (get-loss-node data)]
-          (let [loss-node (compute/forward-pass! loss-node factory)
-                _ (tensors/copy-from-input! factory (:grad loss-node) [1.0])
-                loss-val (->> loss-node :value (tensors/->clj factory) first)]
-            ;; side-effect to update gradients
-            (compute/backward-pass! loss-node)
-            (recur (+ batch-loss 0.0 (double loss-val)) (next batch)))
-          (recur batch-loss (next batch)))
-        batch-loss))))
+(defn run-batch! [factory get-loss-node batch]
+  (loop [batch-loss 0.0 batch batch]
+    (if-let [data (first batch)]
+      (if-let [loss-node (get-loss-node data)]
+        (let [loss-node (compute/forward-pass! loss-node factory)
+              _ (tensors/copy-from-input! factory (:grad loss-node) [1.0])
+              loss-val (->> loss-node :value (tensors/->clj factory) first)]
+          ;; side-effect to update gradients
+          (compute/backward-pass! loss-node)
+          (recur (+ batch-loss 0.0 (double loss-val)) (next batch)))
+        (recur batch-loss (next batch)))
+      batch-loss)))
 
 (defn iter! [model optimizer get-loss-node data-gen opts]
   (let [total-loss (atom 0.0)
         factory (model/tensor-factory model)]
     (doseq [batch (data-gen)]
       (optimize/reset-batch! optimizer model)
-      (let [batch-loss (run-batch! model get-loss-node batch)
+      (let [batch-loss (run-batch! factory get-loss-node batch)
             batch-info {:batch-loss batch-loss :model model :batch batch}]
         (when-let [reporter (:batch-reporter opts)]
           (report/update! reporter batch-info)

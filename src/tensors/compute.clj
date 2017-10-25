@@ -70,18 +70,18 @@
 (def +zero+ (Double. 0.0))
 
 (defn ensure-tensor! [^Node node key factory]
-  (if-let [cache (-> factory meta :cache)]
+  (assoc node key (tensors/zeros factory (.shape node)))
+  #_(if-let [cache (-> factory meta :cache)]
     (let [[t return-fn] (cache-pool/get-obj cache (.shape node))]
-      (when (identical? key :grad)
-        (tensors/transform! factory t +zero+))
+      (tensors/transform! factory t +zero+)
       (-> node
           (assoc key t)
           (with-meta (assoc (meta node) (return-key key) return-fn))))
     (assoc node key (tensors/zeros factory (.shape node)))))
 
 (defn release-tensor! [node key]
-  (when-let [return-fn (-> node meta (get (return-key key)))]
-    (return-fn (:value node)))
+  #_(when-let [return-fn (-> node meta (get (return-key key)))]
+    (return-fn (get node key)))
   (dissoc node key))
 
 (defn with-tensors [^Node node factory]

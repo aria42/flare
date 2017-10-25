@@ -58,7 +58,8 @@
           (let [[outputs _] (rnn/build-seq cell inputs true)
                 train? (:train? (meta this))
                 hidden (last outputs)
-                hidden (if train? (cg/dropout 0.5 hidden) hidden)]
+                hidden (if train? (cg/dropout 0.5 hidden) hidden)
+                ]
             (module/graph hidden->logits hidden))))
       ;; build loss node for two-arguments
       (graph [this sent label]
@@ -101,13 +102,13 @@
 
 (comment
   (do
-    (def opts {:embed-file "data/glove.6B.300d.txt"
+    (def opts {:embed-file "data/small-glove.50d.txt"
                :lstm-size 100
                :num-classes 2
-               :num-data 1000
+               :num-data 100
                :train-file "data/sentiment-train10k.txt"
                :test-file "data/sentiment-test10k.txt"
-               :emb-size 300})
+               :emb-size 50})
     (def factory (no/factory))
     (def emb (load-embeddings opts))
     (def model (model/simple-param-collection factory))

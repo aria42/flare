@@ -12,6 +12,7 @@
             [plumbing.core :as p]
             [tensors.cache-pool :as cache-pool])
   (:import [tensors.node Node]
+           [org.apache.commons.math3.util FastMath]
            [clojure.lang IFn$DD IFn$ODD IFn$DDD IFn$ODDD]))
 
 (defn -mk-matrix 
@@ -195,7 +196,7 @@
   ;; copy scores + exp in place
   (alter! probs!
           (fn ^double [^long idx ^double x] 
-            (Math/exp (real/entry scores idx))))
+            (FastMath/exp (real/entry scores idx))))
   ;; normalize
   (let [Z (double (asum probs!))]
     (scal! (/ 1.0 Z) probs!)
@@ -420,12 +421,12 @@
 
 (defn ^:private ^:static sigmoid
   ^double [^double x]
-  (/ 1.0 (+ 1.0 (Math/exp (- x)))))
+  (/ 1.0 (+ 1.0 (FastMath/exp (- x)))))
 
 (def ^:private +elementwise-op+
   ;; f(x) = e^x, df(x) = e^x
-  {:exp [(fn -exp ^double [^double x] (Math/exp x))
-         (fn -exp-d ^double [^double x] (Math/exp x))]
+  {:exp [(fn -exp ^double [^double x] (FastMath/exp x))
+         (fn -exp-d ^double [^double x] (FastMath/exp x))]
    ;; f(x) = 1/(1+e^{-x}, df(x) = (sigmoid(x)-1)/sigmoid(x)
    :sigmoid [(fn -sigmoid ^double [^double x]
                (sigmoid x))
@@ -434,9 +435,9 @@
                  (* sig (- 1.0 sig))))]
    ;; f(x) = tanh(x), df(X) = 1 - tan(x)^2
    :tanh [(fn -tanh ^double [^double x]
-            (Math/tanh x))
+            (FastMath/tanh x))
           (fn -tanh-d ^double [^double x]
-            (let [t (Math/tanh x)]
+            (let [t (FastMath/tanh x)]
               (- 1.0 (* t t))))]})
 
 (def ^:private +tensor-ops+
