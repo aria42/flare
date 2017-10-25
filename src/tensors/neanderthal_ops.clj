@@ -325,6 +325,30 @@
          false))
       node)))
 
+(defrecord SplitTensorOp []
+  compute/TensorOp
+  (ensure-valid?! [this inputs]
+    (doseq [x inputs]
+      (ensure-valid-shape?! (:shape x)))
+    true)
+  (prep [this node] node)
+  (forward-node-pass! [this node]
+    (let [{:keys [dim, start, stop]} (:graph-op node)
+          child (-> node :children first)
+          v (p/safe-get child :value)]
+      (case (count (:shape child))
+        1 (copy! (subvector v start (- stop start)) (p/safe-get node :value))))
+    node)
+  (backward-node-pass! [this node]
+    (let [{:keys [dim, start, stop]} (:graph-op node)
+          child (-> node :children first)
+          g (p/safe-get node :grad)]
+      (when-let [cg (:grad child)]
+        (case (count (:shape child))
+          1 (transfer!
+             g
+             (subvector cg start (- stop start))))))))
+
 (defrecord ConcatTensorOp []
   compute/TensorOp
   (ensure-valid?! [this inputs]
@@ -423,6 +447,7 @@
     :strech ->StrechTensorOp
     :hadamard ->HadamardTensorOp
     :concat ->ConcatTensorOp
+    :split ->SplitTensorOp
     :dropout ->DropoutTensorOp
     :cross-entropy-loss ->CrossEntropyLossTensorOp
     :arg-max ->ArgMaxTensorOp}

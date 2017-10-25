@@ -232,6 +232,30 @@
           concat-len (reduce clojure.core/+ (map #(nth % dim-to-cat) shapes))]
       (assoc (first shapes) dim-to-cat concat-len))))
 
+(defrecord SplitOp [^long dim ^long start ^long stop]
+  GraphOp
+  (op-key [this] :split)
+  (op-descriptor [this] (format "split(%d, %d, %d)" dim start stop))
+  (op-validate! [this inputs]
+    (when-not (= (count inputs) 1)
+      (throw (ex-info "Must have exactly one arg")))
+    (when (<= stop start)
+      (throw (ex-info "stop must be > start"
+                      {:stop stop :start start})))
+    (let [n (first inputs)
+          dim-len (nth (:shape n) dim)]
+      (when (or (< start 0) (> stop dim-len))
+        (throw (ex-info "Out of dimension"
+                        {:start start, :stop stop :dim-len dim-len})))))
+  (forward-shape [this [node]]
+    (let [shape (:shape node)]
+      (vec
+       (clojure.core/concat
+        (subvec shape 0 dim)
+        [(- stop start)]
+        (when (< (inc dim) (count shape))
+          (subvec shape (inc dim))))))))
+
 (defrecord DropoutGraphOp [prob]
   GraphOp
   (op-key [this] :dropout)
@@ -299,3 +323,11 @@
 (defn concat
   [dim & inputs]
   (add-graph-op (->ConcatOp dim) inputs))
+
+(defn split
+  [node dim & split-indices]
+  (let [dim-len (nth (:shape node) dim)
+        splits (clojure.core/concat [0] split-indices [dim-len])]
+    (map (fn [[start stop]]
+           (add-graph-op (->SplitOp dim start stop) [node]))
+         (butlast (partition-all 2 1 splits)))))

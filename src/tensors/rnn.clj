@@ -17,14 +17,15 @@
   [m :- model/PModel input-dim :- s/Int hidden-dim :- s/Int]
   (node/with-scope "lstm"
     (let [sigmoid (module/from-op (cg/scalar-op :sigmoid))
-          mk-affine (fn [scope]
-                      (node/with-scope scope
-                        (module/affine m hidden-dim [(+ input-dim hidden-dim)])))
-          keep (module/comp sigmoid (mk-affine "keep"))
-          forget (module/comp sigmoid (mk-affine "forget"))
-          output (module/comp sigmoid (mk-affine "output"))
           tanh (module/from-op (cg/scalar-op :tanh))
-          gate (module/comp tanh (mk-affine "gate"))]
+          cat-input-dim (+ input-dim hidden-dim)
+          ;; iof (input/output/forget) module
+          iof (node/with-scope "iof"
+                (module/comp sigmoid
+                             (module/affine m (* 3 hidden-dim) [cat-input-dim])))
+          gate (node/with-scope "gate"
+                 (module/comp tanh
+                              (module/affine m hidden-dim [cat-input-dim])))]
       (reify RNNCell
         (cell-model [this] m)
         (output-dim [this] hidden-dim)
@@ -33,14 +34,16 @@
           (tensors/validate-shape! :lstm-input [input-dim] (:shape input))
           (tensors/validate-shape! :lstm-hidden [hidden-dim] (:shape last-state))
           (let [x (cg/concat 0 input last-output)
-                forgot-probs (module/graph forget x)
-                keep-probs (module/graph keep x)
-                output-probs (module/graph output x)
+                iof-probs (module/graph iof x)
+                ;; split iof into (input, forget, output)
+                ;; at [0, hidden-dim), [hidden-dim, 2*hidden-dim), [2*hidden-dim,..)
+                [input-probs forget-probs output-probs]
+                  (cg/split iof-probs 0 hidden-dim (* 2 hidden-dim))
                 state (module/graph gate x)
                 ;; combine hadamard of forget past, keep present
                 state (cg/+
-                       (cg/hadamard forgot-probs last-state)
-                       (cg/hadamard keep-probs state))
+                       (cg/hadamard forget-probs last-state)
+                       (cg/hadamard input-probs state))
                 output (cg/hadamard output-probs (cg/tanh state))]
             [output state]))))))
 

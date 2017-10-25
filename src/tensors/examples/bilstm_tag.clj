@@ -13,8 +13,6 @@
             [tensors.train :as train]
             [tensors.module :as module]))
 
-(defn build-graph [words embed rnn-cell])
-
 (def cli-options
   ;; An option with a required argument
   [["-d" "--train-file PATH" "path to data"
@@ -37,11 +35,10 @@
     :parse-fn #(Integer/parseInt ^String %)]])
 
 (defn load-embeddings [opts]
-  (let [factory (no/factory)]
-    (embeddings/fixed-embedding
-     (no/factory)
-     (:emb-size opts)
-     (-> opts :embed-file io/reader embeddings/read-text-embedding-pairs))))
+  (embeddings/fixed-embedding
+   (no/factory)
+   (:emb-size opts)
+   (-> opts :embed-file io/reader embeddings/read-text-embedding-pairs)))
 
 (defn lstm-sent-classifier [model word-emb lstm-size num-classes]
   (let [emb-size (embeddings/embedding-size word-emb)
@@ -104,13 +101,13 @@
 
 (comment
   (do
-    (def opts {:embed-file "data/small-glove.50d.txt"
+    (def opts {:embed-file "data/glove.6B.300d.txt"
                :lstm-size 100
                :num-classes 2
                :num-data 1000
                :train-file "data/sentiment-train10k.txt"
                :test-file "data/sentiment-test10k.txt"
-               :emb-size 50})
+               :emb-size 300})
     (def factory (no/factory))
     (def emb (load-embeddings opts))
     (def model (model/simple-param-collection factory))

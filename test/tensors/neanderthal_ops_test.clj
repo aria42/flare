@@ -266,3 +266,17 @@
       (compute/backward-node-pass! op o)
       (is (= (dge 1 2 [1 2]) (:grad n1)))
       (is (= (dge 1 3 [3 4 5]) (:grad n2))))))
+
+(deftest split-test
+  (testing "split forward test"
+    (let [n1 (node/map->Node {:shape [5] 
+                              :value (dv [1 2 3 4 5]) 
+                              :grad (dv 5)})
+          o (node/map->Node {:shape [2] :value (dv 2) :children [n1]
+                             :grad (dv [3 4])
+                             :graph-op {:dim 0 :start 2 :stop 4}})
+          op (->SplitTensorOp)]
+      (compute/forward-node-pass! op o)
+      (is (= (dv [3 4])(:value o)))
+      (compute/backward-node-pass! op o)
+      (is (= [0. 0.  3. 4. 0.] (seq (:grad n1)))))))

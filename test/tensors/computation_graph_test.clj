@@ -75,3 +75,15 @@
       (is (thrown? RuntimeException
                    (op-validate! op [(node/input [3 4]) (node/input [3 3])]))))))
 
+(deftest split-op-test
+  (testing "split op"
+    (let [op (->SplitOp 0 1 3)
+          inputs [(node/input [5])]]
+      (is (= [2] (forward-shape op inputs)))
+      (op-validate! op inputs)
+      (is (thrown? RuntimeException
+                   (op-validate! op [(node/input [3 4])
+                                     (node/input [3 3])]))))
+    (let [output (split (node/input [10]) 0 3 6)]
+      output)))
+

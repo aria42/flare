@@ -4,7 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :global-vars {*warn-on-reflection* true}
-  :jvm-opts ["-XX:+UnlockDiagnosticVMOptions" "-XX:+DebugNonSafepoints" "-XX:+UnlockCommercialFeatures" "-XX:+FlightRecorder" "-Djava.rmi.server.hostname=localhost" "-server" "-mx600m"]
+  :jvm-opts ["-mx2000m" "-XX:+UnlockDiagnosticVMOptions" "-XX:+DebugNonSafepoints" "-XX:+UnlockCommercialFeatures" "-XX:+FlightRecorder" "-Djava.rmi.server.hostname=localhost" "-server"]
   :aot :all
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.nd4j/nd4j-native "0.9.1"]
