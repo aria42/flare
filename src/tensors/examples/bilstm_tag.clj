@@ -11,7 +11,8 @@
             [tensors.report :as report]
             [tensors.computation-graph :as cg]
             [tensors.train :as train]
-            [tensors.module :as module]))
+            [tensors.module :as module]
+            [tensors.optimize :as optimize]))
 
 (def cli-options
   ;; An option with a required argument
@@ -72,36 +73,37 @@
         :let [[tag & sent] (.split (.trim ^String line) " ")]]
     [sent (double (Integer/parseInt tag))]))
 
-(defn train [opts]
+(defn train [{:keys [lstm-size, num-classes, train-file, test-file] :as opts}]
   (let [emb (load-embeddings opts)
-        train-data (take (:num-data opts) (load-data (:train-file opts)))
-        test-data (take (:num-data opts) (load-data (:test-file opts)))
+        train-data (take (:num-data opts) (load-data train-file))
+        test-data (take (:num-data opts) (load-data test-file))
         gen-batches #(partition-all 32 train-data)
         factory (no/factory)
-        m (model/simple-param-collection factory)
+        model (model/simple-param-collection factory)
         ;; need to provide forward-computed graph for loss
-        classifier (lstm-sent-classifier m emb (:lstm-size opts) (:num-classes opts))
-        gb (fn [[sent tag]]
-             (-> classifier
-                 (with-meta {:train? true})
-                 (module/graph sent tag )))
+        classifier (lstm-sent-classifier model emb lstm-size num-classes)
+        loss-fn (fn [[sent tag]]
+                    (-> classifier
+                        (with-meta {:train? true})
+                        (module/graph sent tag)))
+        predict-fn (fn [sent]
+                     (module/predict factory classifier sent))
         train-opts {:num-iters 100
+                    :optimizer (optimize/->Adadelta factory 1.0 0.9 1e-6)
                     ;; report train/test accuracy each iter
                     :iter-reporter (report/concat
-                                    (report/test-accuracy
+                                    (report/accuracy
                                      :train-accuracy
                                      (constantly train-data)
-                                     (fn [sent]
-                                       (module/predict factory classifier sent)))
-                                    (report/test-accuracy
+                                     predict-fn)
+                                    (report/accuracy
                                      :test-accuracy
                                      (constantly test-data)
-                                     (fn [sent]
-                                       (module/predict factory classifier sent))))
+                                     predict-fn))
                     :learning-rate 1}]
-    (println "Params " (map first (seq m)))
-    (println "Total " (model/total-num-params m))
-    (train/train! m gb gen-batches train-opts)))
+    (println "Params " (map first (seq model)))
+    (println "Total # params " (model/total-num-params model))
+    (train/train! model loss-fn gen-batches train-opts)))
 
 (comment
   (def opts {:embed-file "data/small-glove.50d.txt"

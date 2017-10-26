@@ -56,7 +56,7 @@
         (when-let [callback (:batch-callback opts)]
           (when-let [report (callback model batch batch-loss)]
             (clojure.pprint/pprint report))))
-      (optimize/update-model! optimizer model (count batch) (:grad-clip opts 10.0)))
+      (optimize/update-model! optimizer model))
     @total-loss))
 
 (s/defn train!
@@ -67,8 +67,7 @@
     data-gen :- (s/=> [DataBatch])
     opts :- TrainOpts]
    (let [factory (model/tensor-factory model)
-         optimizer (optimize/->Adadelta factory 0.1 0.5 0.1)
-         ;; optimizer (optimize/->SGD factory (:learning-rate opts))
+         optimizer (get opts :optimizer (optimize/->SGD factory 0.1))
          opts (merge +default-train-opts+ opts)]
      (println "Optimizing with " (type optimizer))
      (optimize/init-model! optimizer model)

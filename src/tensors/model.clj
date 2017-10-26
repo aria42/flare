@@ -26,6 +26,14 @@
     (fn ^double [^longs indices ^double x]
       (+ lower (* (- upper lower) (.nextDouble r))))))
 
+(defmethod get-param-rng :xavier-uniform
+  [{:keys [rand-seed, num-in, num-out]}]
+  (let [r (java.util.Random. (long (or rand-seed 0)))
+        low (- (Math/sqrt (/ 6.0 (+ num-in num-out))))
+        high (- low)]
+    (fn ^double [^longs indices ^double x]
+      (+ low (* (- high low) (.nextDouble r))))))
+
 (defmethod get-param-rng :normal
   [{:keys [rand-seed, mean, sigma]}]
   (let [mean (double (or mean 0.0))

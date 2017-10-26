@@ -67,8 +67,14 @@
   (node/with-scope "affine"
     (let [[first-dim & rest] in-shape
           out-shape (vec (cons num-out rest))
-          W (model/add-params! model [num-out first-dim] :name "W")
-          b (model/add-params! model out-shape :name "b")]
+          W (model/add-params! model [num-out first-dim]
+                               :name "W"
+                               :init {:distribution :xavier-uniform
+                                      :num-in first-dim
+                                      :num-out num-out})
+          b (model/add-params! model out-shape
+                               :name "b"
+                               :init {:distribution :normal})]
       (reify Module
         (graph [this x]
           (cg/+ (cg/* W x) b))

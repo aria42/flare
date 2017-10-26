@@ -50,7 +50,7 @@
         batch-gen #(partition num-batch data)
         train-opts {:num-iters num-iters
                     :learning-rate 0.01
-                    :iter-reporter (report/test-accuracy
+                    :iter-reporter (report/accuracy
                                     (fn []
                                       (for [x test-data]
                                         [x (first (get x "label"))]))

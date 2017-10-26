@@ -15,7 +15,7 @@
   (clear! [this])
   (gen [this]))
 
-(defn test-accuracy [k get-data get-pred-node]
+(defn accuracy [k get-data get-pred-node]
   (reify Reporter
     (update! [this info])
     (clear! [this])

@@ -18,18 +18,20 @@
       min
       x)))
 
-(defn update-model! [optimizer model ^double batch-size ^double grad-clip]
-  (doseq [[param-name param-node] (seq model)]
-    ;; clip gradient
-    (let [grad-clip (double grad-clip)
-          normalizer (/ 1.0 batch-size)
-          clip-min (- (Math/abs grad-clip))
-          clip-max (Math/abs grad-clip)]
+(defn batch-norm-clip-grad [model ^double batch-size ^double grad-clip]
+  (let [grad-clip (double grad-clip)
+        normalizer (/ 1.0 batch-size)
+        clip-min (- (Math/abs grad-clip))
+        clip-max (Math/abs grad-clip)]
+    (doseq [[pname param-node] (seq model)]
       (tensors/transform!
        (model/tensor-factory model)
        (p/safe-get param-node :grad)
        (fn ^double [^longs _ ^double x]
-         (clip (* normalizer x) clip-min clip-max))))
+         (clip (* normalizer x) clip-min clip-max))))))
+
+(defn update-model! [optimizer model]
+  (doseq [[param-name param-node] (seq model)]
     ;; perform update
     (let [state (p/safe-get (meta param-node) ::state)
           new-state (update-params! optimizer param-node state)]
@@ -66,26 +68,34 @@
   (init [this params-node]
     ;; sum-of-squares
     (let [shape (p/safe-get params-node :shape)]
-      {:sum-sqs (tensors/zeros factory shape)
-       :update (tensors/zeros factory shape)}))
+      {:exp-grad-sqs (tensors/zeros factory shape)
+       :exp-delta-sqs (tensors/zeros factory shape)
+       :delta (tensors/zeros factory shape)}))
   (update-params! [this params-node state]
     (let [g (p/safe-get params-node :grad)
           v (p/safe-get params-node :value)
-          {:keys [sum-sqs, update]} state]
-      ;; update gradient squared
-      (tensors/transform! factory sum-sqs g
+          {:keys [exp-grad-sqs, exp-delta-sqs, delta]} state]
+      ;; updaete gradient squared
+      ;; E[g2_t] = gamma E[g2_{t-1}] + (1-gamma)  g2_t
+      (tensors/transform! factory exp-grad-sqs g
        (fn ^double [^longs _ ^double cur ^double gi]
          (+ (* gamma cur) (* (- 1.0 gamma) gi gi))))
       ;; copy gradient to update
-      (tensors/copy-from-input! factory update g)
+      (tensors/copy-from-input! factory delta g)
       ;; make update look like
-      (tensors/transform! factory update sum-sqs
+      (tensors/transform! factory delta exp-grad-sqs
         (fn ^double [^longs _ ^double gi ^double G2i]
-          (* gi (/ eta (Math/sqrt (+ epsilon G2i))))))
+          (/ gi (Math/sqrt (+ epsilon G2i)))))
+      (tensors/transform! factory delta exp-delta-sqs
+        (fn ^double [^longs _ ^double gi ^double d2i]
+          (* gi (Math/sqrt (+ epsilon d2i)))))
       ;; perform update
-      (tensors/transform! factory v update
+      (tensors/transform! factory v delta
         (fn ^double [^longs _ ^double cur ^double u]
-          (- cur u)))
+          (- cur (* eta u))))
+      (tensors/transform! factory exp-delta-sqs delta
+         (fn ^double [^longs _ ^double cur ^double di]
+           (+ (* gamma cur) (* (- 1.0 gamma) di di))))
       state)))
 
 
