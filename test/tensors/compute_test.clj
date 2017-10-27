@@ -6,7 +6,8 @@
             [tensors.node :as node]
             [tensors.model :as model]
             [uncomplicate.neanderthal.core :refer :all]
-            [clojure.test :refer :all]))
+            [clojure.test :refer :all]
+            [tensors.compute :as compute]))
 
 (deftest compile-forward-test
   (testing "simple graph"
@@ -15,11 +16,12 @@
           Z (cg/+ X Y)
           factory (no/factory)
           input-vals {"X" [[1 2] [2 1]] "Y" [[1 2] [1 1]]}]
-      (let [Z (forward-pass! Z factory input-vals)]
+      (with-inputs! factory Z input-vals)
+      (let [Z (forward-pass! factory Z)]
         (is (= [[2.0 4.0] [3.0 2.0]]
-               (tensors/->clj factory (:value Z))))
+               (seq (:value Z))))
         (is (= [[0.0 0.0] [0.0 0.0]]
-               (tensors/->clj factory (:grad Z)))))))
+               (seq (:grad Z)))))))
   (testing "lr graph"
     (let [num-classes 2
           num-feats 3
@@ -33,20 +35,18 @@
           label (node/input "label" [1])
           loss (cg/cross-entropy-loss activations label)]
       (let [input->vals {"f" [1 2 1] "label" [0]}
-            one-grad (tensors/from-nums factory [1.0])
-            loss (-> loss
-                     (forward-pass! factory input->vals)
-                     (assoc :grad one-grad))]
-        (is (not (neg? (first (tensors/->clj factory (:value loss))))))
-        (backward-pass! loss)
+            one-grad (tensors/from factory [1.0])
+            _ (compute/with-inputs! factory loss input->vals)
+            loss (forward-pass! factory loss)]
+        (is (not (neg? (first (seq (:value loss))))))
+        (backward-pass! factory (assoc loss :grad one-grad))
         (let [W-grad (:grad (model/canonical-node m "W"))
               [wrong-row right-row] (rows W-grad)]
           ;; the incorrect label should get neg gradient
           (is (every? neg? wrong-row))
           ;; the correct label should get neg gradient
           (is (every? pos? right-row)))
-        loss))
-    )
+        loss)))
   (testing "repeated test"
     (let [factory (no/factory)
           model (model/simple-param-collection factory)
@@ -55,11 +55,11 @@
           X (model/add-params! model [2])
           Z (cg/+ X X)]
       ;; hack to set values for params
-      (tensors/copy-from-input! factory
+      (tensors/copy! factory
          (:value (get params-map (:ref-name X)))
          [2.0 2.0])
-      (let [Z (forward-pass! Z factory)]
-        (is (= [4.0 4.0] (tensors/->clj factory (:value Z))))
-        (backward-pass! (assoc Z :grad (tensors/from-nums factory [1 1])))
-        (is (= [2.0 2.0] (tensors/->clj factory (:grad X))))))))
+      (let [Z (forward-pass!  factory Z)]
+        (is (= [4.0 4.0] (seq (:value Z))))
+        (backward-pass! factory (assoc Z :grad (tensors/from factory [1 1])))
+        (is (= [2.0 2.0] (seq (:grad X))))))))
 

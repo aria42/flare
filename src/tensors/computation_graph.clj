@@ -40,22 +40,17 @@
    :op
    (forward-shape op nodes)
    (node/scoped-name (node/gen-name (name (op-key op))))
-   ;; value
-   nil
-   ;; grad
-   nil
+   nil ;; value
+   nil ;; grad
    op
-   ;; tensor-op
-   nil
-   ;; children
    nodes))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Display/Summarize Graphs
 
 (s/defn ^:private display-name [node]
-  (case (:type node)
-    :input (format "input(%s, %s)" (:ref-name node) (:shape node))
+  (if (identical? (:type node) :input)
+    (format "input(%s, %s)" (:ref-name node) (:shape node))
     ;; else
     (:ref-name node)))
 
@@ -69,7 +64,7 @@
             (:shape n))))
 
 (s/defn summarize-computation
-  "Create informative s-expression for computation"  
+  "Create informative s-expression for computation"
   ([target indent :- s/Int]
    (str
     (when (> indent 0)
@@ -256,7 +251,7 @@
         (when (< (inc dim) (count shape))
           (subvec shape (inc dim))))))))
 
-(defrecord DropoutGraphOp [prob]
+(defrecord DropoutGraphOp [^double prob]
   GraphOp
   (op-key [this] :dropout)
   (op-validate! [this [input-node :as ns]]

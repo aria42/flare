@@ -8,35 +8,25 @@
             [plumbing.core :as p]
             [tensors.graph :as graph]))
 
-(defn clj-tensor? [x]
-  (and (vector? x)
-       (or (every? number? x)
-           (every? clj-tensor? x))))
-
-(s/defschema DataBatch
-  [{s/Str (s/named (s/pred clj-tensor?) "clj-tensor")}])
-
-
 (s/defschema TrainOpts
   {(s/optional-key :num-iters) s/Int
+   (s/optional-key :optimizer) optimize/Optimizer
    (s/optional-key :learning-rate) s/Num
-   (s/optional-key :batch-reporter) report/Reporter
-   (s/optional-key :grad-clip) s/Num})
+   (s/optional-key :iter-reporter) report/Reporter})
 
 (def +default-train-opts+
   {:num-iters 100
-   :grad-clip 10.0
    :learning-rate 0.01})
 
 (defn run-batch! [factory get-loss-node batch]
   (loop [batch-loss 0.0 batch batch]
     (if-let [data (first batch)]
       (if-let [loss-node (get-loss-node data)]
-        (let [loss-node (compute/forward-pass! loss-node factory)
-              _ (tensors/copy-from-input! factory (:grad loss-node) [1.0])
-              loss-val (->> loss-node :value (tensors/->clj factory) first)]
+        (let [loss-node (compute/forward-pass! factory loss-node)
+              _ (tensors/copy! factory (:grad loss-node) [1.0])
+              loss-val (-> loss-node :value seq first)]
           ;; side-effect to update gradients
-          (compute/backward-pass! loss-node)
+          (compute/backward-pass! factory loss-node)
           (recur (+ batch-loss 0.0 (double loss-val)) (next batch)))
         (recur batch-loss (next batch)))
       batch-loss)))
@@ -64,7 +54,7 @@
    is a sequence of {input-name clj-tensor} maps (see schema above)"
   ([model :- model/PModel
     get-loss-node :- (s/=> tensors.node.Node s/Any)
-    data-gen :- (s/=> [DataBatch])
+    data-gen
     opts :- TrainOpts]
    (let [factory (model/tensor-factory model)
          optimizer (get opts :optimizer (optimize/->SGD factory 0.1))
@@ -94,6 +84,6 @@
   (let [factory (model/tensor-factory model)]
     (train!
      model
-     (fn [input->vals] (compute/with-inputs factory loss-node input->vals))
+     (fn [input->vals] (compute/with-inputs! factory loss-node input->vals))
      data-gen
      opts)))

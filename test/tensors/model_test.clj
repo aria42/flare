@@ -41,9 +41,9 @@
           x (add-params! m [2 3] :name "x")
           y (add-params! m [3 2] :name "y")
           z (add-params! m [3] :name "z")]
-      (tensors/copy-from-input! f (:value x) (range 6))
-      (tensors/copy-from-input! f (:value y) (range 6 12))
-      (tensors/copy-from-input! f (:value z) (range 12 15))
+      (tensors/copy! f (:value x) (range 6))
+      (tensors/copy! f (:value y) (range 6 12))
+      (tensors/copy! f (:value z) (range 12 15))
       ;; should be [0.0-15.0)
       (let [xs (model/to-doubles m)]
         (is (= (map double (range 15)) (seq xs))))

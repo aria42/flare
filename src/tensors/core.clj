@@ -41,34 +41,55 @@
 ;; Tensor Factory
 
 (defprotocol PFactory
-  (from-nums [this nums])
-  (get-op [this op-key])
-  (zeros [this shape])
+  "A `PFactory` knows how to make and manipulate tensors. The tensor
+   type depends on the `PFactory`, but there are some conventions
+   tensors should have:
+
+      * Tensors should be seqable (might revisit this)
+      * Tensors are mutable objects (duh, performance) "
+  (from [this data]
+    "create a tensor from `data`. Should minimally accept
+     (nested) sequences of numbers, but can also effectively
+     copy an existing tensor")
+  (get-op [this op-key]
+    "returns the `TensorOp` associated with the `op-key`")
+  (zeros [this shape]
+    "create a 0.0 filled tensor of a given shape")
   (transform!
     [this tensor get-val]
     [this tensor other-tensor get-val]
-    "`get-val` can be a few different things, depending on arity
+    "In-place transform of a `tensor` using the `get-val` function,
+     which can be a few different things
 
-      Three argument version [this tensor get-val]
+      [this tensor get-val]
       ==============================
        * A fixed double to fill `tensor`
-       * A IFn$ODD primitive function taking (dims, existing) which
+       * A `IFn$ODD` primitive function taking (dims, existing) which
          returns new value for the position
 
 
-      Four argument version [this tensor other-tensor get-val]
+      [this tensor other-tensor get-val]
       ================================
       Assumes other-tensor shape matches tensor
-      * IFn$DDD takes (cur-val, other-val) and returns new value
-      * IFn$ODDD takes (position, cur-val, other-val) and position
+      * `IFn$DDD` takes (cur-val, other-val) and returns new value
+      * `IFn$ODDD` takes (position, cur-val, other-val) and position
         is the long-array of the location")
-  (->clj [this tensor])
-  (grad-step! [this weight alpha grad])
-  (copy-from-input! [this tensor! nums])
-  (shape [this t]))
+  (copy! [this dst-tensor! src-tensor-like]
+    "copy from source to destination. The src should be same set of things
+     accdepted by `PFactory/from`")
+  (shape [this t]
+    "return the shape of the tennsor as integer (clojure) vector"))
+
+(def *factory*
+  "atom for global factory to avoid passing into operations"
+  (atom nil))
+
+
+(defn set-factory! [factory]
+  (reset! *factory* factory))
 
 (defn with-cache [factory num-to-cache]
   (with-meta factory
     {:cache (cache-pool/make
              (or num-to-cache 100)
-             (fn [shape] (zeros factory shape)))}))[]
+             (fn [shape] (zeros factory shape)))}))

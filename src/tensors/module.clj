@@ -7,42 +7,45 @@
   (:import [tensors.node Node]))
 
 (defprotocol Module
+  "A module knows ow to construct a graph for a given input. This is
+   the work-horse for dynamic graph construction.
+
+   By convention, impls should also implemnt `IFunction` with
+   the `graph` behavior"
   (graph
-    [this]
     [this input]
     [this input1 input2]
     "build a graph for any input(s)"))
 
-(defprotocol ModelModule
-  (-params [this] "map of unscoped parameter keys -> param-node"))
-
-(defprotocol InputModule
-  (-required-inputs [this]))
-
-(defn forward! [factory module & inputs]
+(defn forward!
+  "computes forward pass for the graph constructed by the module
+  on the provided inputs"
+  [factory module & inputs]
   (let [n (apply graph module inputs)]
-    (compute/forward-pass! n factory)))
+    (compute/forward-pass! factory n)))
 
-(defn predict [factory score-module & inputs]
+(defn predict
+  "on computed graph, also apply an `arg-max` operation and
+   return the forward value of that node"
+  [factory score-module & inputs]
   (when-let [n (apply graph score-module inputs)]
-       (compute/forward-pass! (cg/arg-max n) factory)))
-
-(defn params [module]
-  (when (satisfies? ModelModule module)
-    (-params module)))
-
-(defn required-inputs [module]
-  (when (satisfies? InputModule module)
-    (-required-inputs module)))
+    (compute/forward-pass! factory (cg/arg-max n))))
 
 (defn from-op [op]
   (when-not (satisfies? cg/GraphOp op)
     (throw (ex-info "Must be graph-op" {:op op})))
-  (reify Module
+  (reify 
+    Module
     (graph [this input]
       (cg/add-graph-op op [input]))
     (graph [this input1 input2]
-      (cg/add-graph-op op [input1 input2]))))
+      (cg/add-graph-op op [input1 input2]))
+
+    clojure.lang.IFn
+    (invoke [this input]
+      (graph this input))
+    (invoke [this input1 input2]
+      (graph this input1 input2))))
 
 (defn comp [& ms]
   (reify
@@ -53,11 +56,8 @@
        input
        (reverse ms)))
 
-    ModelModule
-    (-params [this] (merge params ms))
-
-    InputModule
-    (-required-inputs [this] (mapcat required-inputs ms))))
+    clojure.lang.IFn
+    (invoke [this input] (graph this input))))
 
 
 (defn affine
@@ -75,8 +75,9 @@
           b (model/add-params! model out-shape
                                :name "b"
                                :init {:distribution :normal})]
-      (reify Module
+      (reify
+        Module
         (graph [this x]
           (cg/+ (cg/* W x) b))
-        ModelModule
-        (-params [this] [W b])))))
+        clojure.lang.IFn
+        (invoke [this x] (graph this x))))))

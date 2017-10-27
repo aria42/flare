@@ -12,7 +12,8 @@
             [tensors.computation-graph :as cg]
             [tensors.train :as train]
             [tensors.module :as module]
-            [tensors.optimize :as optimize]))
+            [tensors.optimize :as optimize]
+            [tensors.core :as tensors]))
 
 (def cli-options
   ;; An option with a required argument
@@ -65,7 +66,7 @@
       ;; build loss node for two-arguments
       (graph [this sent label]
         (when-let [logits (module/graph this sent)]
-          (let [label-node (node/constant "label" factory [label])]
+          (let [label-node (node/constant factory "label" [label])]
             (cg/cross-entropy-loss logits label-node)))))))
 
 (defn load-data [path]

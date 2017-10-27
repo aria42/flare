@@ -4,7 +4,10 @@
             [tensors.computation-graph :refer :all]
             [tensors.core :as tensors]
             [tensors.node :as node]
-            [tensors.model :as model]))
+            [tensors.model :as model]
+            [tensors.neanderthal-ops :as no]))
+
+(tensors/set-factory! (no/factory))
 
 (deftest scope-test
   (testing "nested scope"

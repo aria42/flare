@@ -4,7 +4,6 @@
   (:require [schema.core :as s]
             [tensors.core :as tensors]
             [tensors.cache-pool :as cache-pool]
-            [tensors.model :as model]
             [tensors.node :as node]
             [plumbing.core :as p])
   (:import [java.util Arrays]))
@@ -43,15 +42,24 @@
       (/ (+ (.nextGaussian r) mean) sigma))))
 
 (defprotocol PModel
+  "A model is effectively a paramaeter collection that holds graph nodes
+   representing parameter groups.
+
+   By convention, any implementation should be seqable and return a
+   sequence of [param-name, param-node] pairs for the model"
   (tensor-factory [this]
-    "return the underlying tensor factory for the model")
+    "return the underlying tensor factory (`PFactory`) for the model")
   (-add-params! [this param-name shape init-spec]
-    "add parameters to the model, returns a param graph node. Some
-     argument defaulting happens below so this is the internal method")
-  (-add-param-metadata! [this param-name key val])
+    "add parameters to the model (mutably), returns a param graph node. Some
+     argument defaulting happens below so this is the internal method,
+    use `add-params!` as the entry point")
+  (-add-param-metadata! [this param-name key val]
+    "add meta-data [key, val] pair to the node for the given `param-name`
+     node. Useful for storing optimization data. Internal method due to some
+     parameter defaulting.")
   (canonical-node [this param-name]
-    "returns a caonical `Node` for the parameter. If parameters
-     have been initialized, also returns `:value` and `:grad` tensor fields"))
+    "returns a caonical `Node` for the parameter (meaning it stores
+      the \"true\" value/gradient for for the parameters)."))
 
 (defn total-num-params [model]
   (p/sum (fn [[_ p]] (apply * (:shape p))) model))
@@ -61,6 +69,10 @@
   (fix-param! [this param-name value]))
 
 (defn add-params!
+  "Add parameters of givne `shape` to model. Accepts some options
+     * `:name` String name for parameter for inspection later
+     * `:init` a map satisfying `InitParamSpec` for 
+       distribution of how to sample values"
   [model shape & {:keys [name, init]}]
   (let [name (or name (clojure.core/name (gensym "param")))
         init (or init {:distribution :uniform})]
@@ -69,13 +81,20 @@
     (-add-params! model name shape init)))
 
 (defn with-metadata!
+  "add a key-value pair to the metadata on the underlying
+   parameter node. As name implies, `param-node-or-name` can
+   be either current canonical node or the `Node.ref-name`
+   for the parameter group. "
   [model param-node-or-name key value]
   (let [node-name (if (instance? Node param-node-or-name)
                     (.ref-name ^Node param-node-or-name)
                     param-node-or-name)]
     (-add-param-metadata! model node-name key value)))
 
-(defn rand-params! [model]
+(defn rand-params!
+  "using the initialziation spec for each param group, generate
+   a fresh setting of the parameters"
+  [model]
   (doseq [[_ node] (seq model)]
     (when-let [init (:init node)]
       (tensors/transform!
@@ -86,10 +105,7 @@
 (s/defn simple-param-collection :- PModel
   "Simple collection of parameters
    NOTE: The meta-data of the param-collection gives you access
-   to the underlying data. Don't use it except for an emergency!
-
-  The factory is also adorned with a caching pool under the
-  :cache meta-data "
+   to the underlying data. Don't use it except for an emergency!"
   [factory :- tensors/PFactory]
   (let [m (java.util.HashMap.)]
     (with-meta
@@ -125,27 +141,29 @@
             (throw (ex-info "Non-existtant param" {:key param-or-name}))))
 
         -TestPModel
-        (fix-param! [this param-or-name tensor-like]
+        (fix-param! [this param-or-name tensor-data]
           (let [param-name (if (instance? Node param-or-name)
                              (.ref-name ^Node param-or-name)
                              param-or-name)]
 
             (when-let [param (.get m param-name)]
               (let [param-tensor (:value param)]
-                (tensors/copy-from-input! factory param-tensor tensor-like)))))
+                (tensors/copy! factory param-tensor tensor-data)))))
+
         clojure.lang.Seqable
         (seq [this]
           (for [e m] [(key e) (val e)])))
       {:data m})))
 
 
-(defn to-doubles
-  "Flatten parameters into a single vector"
+(defn ^doubles to-doubles
+  "Flatten parameters into a single JVM double array. Can take
+   either parameter values or current gradient, depending on `key`"
   ([model] (to-doubles model :value))
   ([model key]
    (when-not (#{:grad :value} key)
      (throw (ex-info "Key must be {:grad, :value}" {:key key})))
-   (let [factory (model/tensor-factory model)
+   (let [factory (tensor-factory model)
          xs (double-array (total-num-params model))
          es (sort-by first (seq model))]
      (loop [es es offset 0]
@@ -162,18 +180,19 @@
          xs)))))
 
 (defn from-doubles!
-  "Flatten parameters into a single vector"
+  "Flatten parameters into a single vector and writes to each
+   parameter group tensor `:value`"
   [model ^doubles xs]
   (when-not (= (alength xs) (total-num-params model))
     (throw (ex-info "Array doesn't match model size"
                     {:model-size (total-num-params model)
                      :array-len (alength xs)})))
-  (let [factory (model/tensor-factory model)
+  (let [factory (tensor-factory model)
         es (sort-by first (seq model))]
     (loop [es es offset 0]
       (if-let [[k n] (first es)]
         (let [num-vals (int (apply * (:shape n)))
               vals (Arrays/copyOfRange xs offset (+ offset num-vals))]
-          (tensors/copy-from-input! factory (:value n) (seq vals))
+          (tensors/copy! factory (:value n) (seq vals))
           (recur (next es) (+ offset num-vals)))
         model))))

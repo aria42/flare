@@ -52,7 +52,7 @@
       Reporter
       (update! [this info]
         (let [factory (model/tensor-factory (p/safe-get info :model))
-              grads (mapcat (fn [[_ x]] (flatten (tensors/->clj factory (:grad x))))
+              grads (mapcat (fn [[_ x]] (flatten (seq (:grad x))))
                             (p/safe-get info :model))
               l2-norm (Math/sqrt (reduce (fn [res x] (+ res (* x x))) 0.0 grads))
               max-l1-norm (apply max (map (fn [x] (Math/abs (double x))) grads))]

@@ -13,7 +13,7 @@
   (for [word sent
         :let [e (lookup emb word)]
         :when e]
-    (node/constant (node/gen-name "word") factory e)))
+    (node/constant factory (node/gen-name "word") e)))
 
 (deftype FixedEmbedding [^java.util.Map m ^long emb-size]
   Embedding
@@ -31,7 +31,7 @@
     (doseq [[obj nums] obj-vec-pairs]
       (when-let [dupe (.get m obj)]
         (throw (ex-info "Duplicate entry" {:dupe obj})))
-      (let [t (tensors/from-nums factory nums)
+      (let [t (tensors/from factory nums)
             s (tensors/shape factory t)]
         (when (not= s expected-shape)
           (throw (ex-info "embedding doesn't have same shape"

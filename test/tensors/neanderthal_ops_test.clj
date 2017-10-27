@@ -55,7 +55,7 @@
            (double (+ x (aget idxs 0) (aget idxs 1)))))
       (is (= [[0.0 1.0] [1.0 2.0]] (seq m))))
     (testing "set function and other value"
-      (let [o (tensors/from-nums f (range 10))]
+      (let [o (tensors/from f (range 10))]
         (tensors/transform! f t 0.0)
         (tensors/transform! f t o (fn ^double [^double cur ^double other]
                                     (* other other)))
@@ -208,8 +208,7 @@
                  :grad (dv [1.0])})
           node (assoc loss :children [scores label])]
       (compute/ensure-valid?! op [scores label])
-      (let [node (compute/prep op node)
-            forward-node (compute/forward-node-pass! op node)]
+      (let [forward-node (compute/forward-node-pass! op node)]
         (is (<
              (l2-dist
               (:tensors.neanderthal-ops/probs forward-node)

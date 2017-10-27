@@ -47,8 +47,6 @@
         ;; output += input
         (np/axpy! input output)))
     node)
-  (prep [this node]
-    node)
   (backward-node-pass! [this node]
     ;; x = x1 + ... + xn
     ;; dxi/dt = dx/dt * 1
@@ -68,8 +66,6 @@
       (ensure-valid-shape?! (.shape n)))
     (when-not (= 2 (count input-nodes))
       (throw (ex-info "Must have two arguments to MultTensorOp"))))
-  (prep [this node]
-    node)
   (forward-node-pass! [this node]
     (let [^Node node node
           out (.value node)
@@ -155,8 +151,6 @@
     (when-not (= 2 (count (.shape ^Node (first input-nodes))))
       (throw (ex-info "Need matrix shape"
                       {:shape (.shape ^Node (first input-nodes))}))))
-  (prep [this node]
-    node)
   (forward-node-pass! [this node]
     (let [^Node node node
           output (.value node)
@@ -176,8 +170,6 @@
     (let [shape (:shape (first input-nodes))]
       (when-not (tensors/vector-shape? shape)
         (throw (ex-info "Need vector shape" {:shape shape})))))
-  (prep [this node]
-    node)
   (forward-node-pass! [this node]
     (let [^Node node node
           output (.value node)
@@ -206,16 +198,12 @@
   compute/TensorOp
   (ensure-valid?! [this [activations label]]
     true)
-  (prep [this node]
-    (let [^Node node node
-          [^Node activations-node ^Node label-node] (.children node)
-          len (-> activations-node .shape first)]
-      (assoc node ::probs (dv len))))
   (forward-node-pass! [this node]
     (let [^Node node node
           [^Node activations-node ^Node label-node] (.children node)
           activations (.value activations-node)
-          probs (soft-max! activations (p/safe-get node ::probs))
+          len (-> activations-node .shape first)
+          probs (soft-max! activations (dv len))
           label (-> label-node .value (entry 0) long)
           correct-prob (real/entry probs label)]
       (when (>= label (dim probs))
@@ -223,7 +211,7 @@
                         {:label label
                          :dim (dim activations)})))
       (real/entry! (.value node) 0 (- (Math/log correct-prob)))
-      node))
+      (assoc node ::probs probs)))
   (backward-node-pass! [this node]
     (let [^Node node node
           [^Node activations-node ^Node label-node] (.children node)
@@ -259,7 +247,6 @@
     (when-not (= 1 (count (:shape X)))
       (throw (ex-info "Only handle vectors" {:X X})))
     true)
-  (prep [this node] node)
   (forward-node-pass! [this node]
     (let [output (p/safe-get node :value)
           X (-> node :children first :value)]
@@ -274,7 +261,6 @@
     (ensure-valid-shape?! (:shape X))
     (ensure-valid-shape?! (:shape Y))
     true)
-  (prep [this node] node)
   (forward-node-pass! [this node]
     (let [output (p/safe-get node :value)
           [X Y] (map :value (:children node))]
@@ -291,30 +277,30 @@
         (hadamard dY X dZ false)))
     node))
 
+(defn dropout-mask [node]
+  (let [t (-zeros (:shape node))
+        prob (p/safe-get-in node [:graph-op :prob])]
+    (alter! t (fn ^double [^double _]
+                (if (< (rand) prob)
+                  0.0
+                  1.0)))
+    t))
+
 (defrecord DropoutTensorOp []
   compute/TensorOp
   (ensure-valid?! [this inputs]
     (doseq [x inputs]
       (ensure-valid-shape?! (:shape x)))
     true)
-  (prep [this node]
-    (let [t (-zeros (:shape node))
-          prob (p/safe-get-in node [:graph-op :prob])]
-      (alter! t (fn ^double [^double _]
-                  (if (< (rand) prob)
-                    0.0
-                    1.0)))
-      (assoc node ::dropout-mask t)))
   (forward-node-pass! [this node]
-    (let [mask (p/safe-get node ::dropout-mask)
+    (let [mask (dropout-mask node)
           input (first (:children node))]
       (hadamard
        (p/safe-get node :value)
        mask
        (p/safe-get input :value)
        false)
-      node)
-    node)
+      (assoc node ::dropout-mask mask)))
   (backward-node-pass! [this node]
     (let [mask (p/safe-get node ::dropout-mask)
           input (first (:children node))]
@@ -332,7 +318,6 @@
     (doseq [x inputs]
       (ensure-valid-shape?! (:shape x)))
     true)
-  (prep [this node] node)
   (forward-node-pass! [this node]
     (let [{:keys [dim, start, stop]} (:graph-op node)
           child (-> node :children first)
@@ -356,7 +341,6 @@
     (doseq [x inputs]
       (ensure-valid-shape?! (:shape x)))
     true)
-  (prep [this node] node)
   (forward-node-pass! [this node]
     (let [output (p/safe-get node :value)
           inputs (:children node)
@@ -397,7 +381,6 @@
   (ensure-valid?! [this [X]]
     (ensure-valid-shape?! (:shape X))
     true)
-  (prep [this node] node)
   (forward-node-pass! [this node]
     (let [output (p/safe-get node :value)
           X (-> node :children first :value)]
@@ -479,10 +462,6 @@
   tensors/PFactory
   (get-op [this op-key]
     ((get +tensor-ops+ op-key)))
-  (->clj [this tensor]
-    (if (vctr? tensor)
-      (seq tensor)
-      (doall (map seq (rows tensor)))))
   (transform! [this tensor get-val]
     (let [constant? (number? get-val)
           fixed-return (double (if constant? get-val 0.0))
@@ -543,14 +522,12 @@
     (if (vctr? t)
       [(dim t)]
       [(mrows t) (ncols t)]))
-  (from-nums [this nums]
+  (from [this nums]
     (if (or (vctr? nums) (matrix? nums))
       nums
       (-from-nums nums (tensors/guess-shape nums))))
-  (grad-step! [this weights alpha grad]
-    (axpy! (- (double alpha)) grad weights))
 
-  (copy-from-input! [this tensor! nums]
+  (copy! [this tensor! nums]
     (cond
       ;; fast if the nums is already neanderthal
       (or (matrix? nums) (vctr? nums)) (copy! nums tensor!)

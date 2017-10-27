@@ -56,12 +56,12 @@
   ;; intentional no-op
   (init [this params-node] nil)
   (update-params! [this params-node state]
-     (tensors/grad-step!
-      factory
-      (p/safe-get params-node :value)
-      alpha
-      (p/safe-get params-node :grad))
-    nil))
+    (tensors/transform! 
+     factory 
+     (p/safe-get params-node :value) 
+     (p/safe-get params-node :grad)
+     (fn ^double [^longs _ ^double cur ^double grad]
+       (- cur (* alpha grad))))))
 
 (defrecord Adadelta [factory ^double eta ^double gamma ^double epsilon]
   Optimizer
@@ -81,7 +81,7 @@
        (fn ^double [^longs _ ^double cur ^double gi]
          (+ (* gamma cur) (* (- 1.0 gamma) gi gi))))
       ;; copy gradient to update
-      (tensors/copy-from-input! factory delta g)
+      (tensors/copy! factory delta g)
       ;; make update look like
       (tensors/transform! factory delta exp-grad-sqs
         (fn ^double [^longs _ ^double gi ^double G2i]
@@ -125,7 +125,7 @@
               (let [n (compute/forward-pass! (compute/with-model-params model g) factory)
                     loss (first (:value n))]
                 ;; accumulate gradient
-                (assoc n :grad (tensors/copy-from-input! factory (:grad n) [1]))
+                (assoc n :grad (tensors/copy! factory (:grad n) [1]))
                 (compute/backward-pass! n)
                 (recur (+ sum-loss loss) (next data))))
             [sum-loss (model/to-doubles model :grad)]))))))

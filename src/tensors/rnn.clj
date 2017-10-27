@@ -54,8 +54,8 @@
    (let [factory (-> cell cell-model model/tensor-factory)
          out-dim (output-dim cell)
          zero  (tensors/zeros factory [out-dim])
-         init-output (node/constant "h0" factory zero)
-         init-state (node/constant "c0" factory  zero)
+         init-output (node/constant factory "h0" zero)
+         init-state (node/constant factory "c0"  zero)
          ;; for bidirectional, concat reversed version of input
          inputs (if bidrectional?
                   (map #(cg/concat 0 %1 %2) inputs (reverse inputs))
