@@ -7,7 +7,8 @@
             [clojure.set :as set]
             [tensors.cache-pool :as cache-pool]
             [tensors.model :as model])
-  (:import [tensors.node Node]))
+  (:import [tensors.node Node]
+           [java.util LinkedList]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Compiled Graph Protocols + Operations
@@ -71,11 +72,16 @@
 
 (def +zero+ (Double. 0.0))
 
-(defn with-tensors [^Node node factory]
+(defn with-tensors
+  [^Node node factory cache]
   (if (identical? (.type node) :op)
     (-> node
-        (assoc :value (tensors/zeros factory (.shape node)))
-        (assoc :grad (tensors/zeros factory (.shape node))))
+        (assoc :value (if cache
+                        (cache-pool/get-obj cache (.shape node))
+                        (tensors/zeros factory (.shape node))))
+        (assoc :grad (if cache
+                       (cache-pool/get-obj cache (.shape node))
+                       (tensors/zeros factory (.shape node)))))
     node))
 
 (defn validate-input-keys [nodes ^java.util.Map input->vals]
@@ -106,34 +112,69 @@
   "forward-pass will topographic walk through graph writing to `:value`
   key on all compiled nodes. You can then look up and retrieve the tensors
   associated with any node"
-  [factory ^Node target]
-  (let [nodes (graph/topographic target)
-        computed-nodes (java.util.HashMap. (count nodes))
-        get-canonical (fn [^Node node] (.get computed-nodes (.ref-name node)))]
-    ;; Copy input values to node tensors
-    (doseq [^Node onode nodes]
-      (when-not (get-canonical onode)
-        (let [children (.children onode)
-              canonical-children (java.util.ArrayList. (count children))]
-          (doseq [c children]
-            (let [cc (get-canonical c)]
-              (when-not cc
-                (throw (ex-info "No child canonical" {:missing c})))
-              (.add canonical-children cc)))
-          (let [node (assoc onode :children canonical-children)
-                ^Node node (with-tensors node factory)]
-            (.put computed-nodes 
-                  (.ref-name node)
-                  (if (seq (.children node))
-                    (forward-node-pass! (node-tensor-op factory node) node)
-                    node))))))
-    (.get computed-nodes (.ref-name target))))
+  ([factory ^Node target]
+   (forward-pass! factory target nil))
+  ([factory ^Node target cache]
+   (let [nodes (graph/topographic target)
+         computed-nodes (java.util.HashMap. (count nodes))
+         get-canonical (fn [^Node node] (.get computed-nodes (.ref-name node)))]
+     ;; Copy input values to node tensors
+     (doseq [^Node onode nodes]
+       (when-not (get-canonical onode)
+         (let [children (.children onode)
+               canonical-children (java.util.ArrayList. (count children))]
+           (doseq [c children]
+             (let [cc (get-canonical c)]
+               (when-not cc
+                 (throw (ex-info "No child canonical" {:missing c})))
+               (.add canonical-children cc)))
+           (let [node (assoc onode :children canonical-children)
+                 ^Node node (with-tensors node factory cache)]
+             (.put computed-nodes 
+                   (.ref-name node)
+                   (if (seq (.children node))
+                     (forward-node-pass! (node-tensor-op factory node) node)
+                     node))))))
+     (.get computed-nodes (.ref-name target)))))
 
 (defn backward-pass!
   "backward-pass through all the parameter nodes associated with
    the graph computation, will write to `:grad` key for all nodes
    that have gradients (basically non-inputs) in graph"
-  [factory ^Node target]
-  (let [nodes (reverse (graph/post-order-nodes target))]
+  ([factory ^Node target cache]
+   (let [nodes (reverse (graph/post-order-nodes target))]
+     (doseq [^Node n nodes :when (identical? :op (.type n))]
+       (backward-node-pass! (node-tensor-op factory n) n)
+       (when (and cache (identical? (.type n) :op))
+         (cache-pool/return-obj cache (.shape n) (.value n))
+         (cache-pool/return-obj cache (.shape n) (.grad n))))))
+  ([factory ^Node target]
+   (backward-pass! factory target nil)))
+
+(defn free-tensors! [node cache]
+  (let [nodes (reverse (graph/post-order-nodes node))]
     (doseq [^Node n nodes :when (identical? :op (.type n))]
-      (backward-node-pass! (node-tensor-op factory n) n))))
+      (when (identical? (.type n) :op)
+        (cache-pool/return-obj cache (.shape n) (.value n))
+        (cache-pool/return-obj cache (.shape n) (.grad n))))))
+
+(defn cache [factory num-to-cache]
+  (let [m (java.util.HashMap.)]
+    (reify
+      cache-pool/-CachePool
+      (get-obj [this shape]
+        (if-let [^LinkedList lst (.get m shape)]
+          (if-let [t (.poll lst)]
+            (do (tensors/transform! factory t 0.0)
+                t)
+            (tensors/zeros factory shape))
+          (tensors/zeros factory shape)))
+      (return-obj [this shape t]
+        (if-let [^LinkedList lst (.get m shape)]
+          (.offer lst t)
+          (.put m shape (doto (LinkedList.) (.add t)))))
+      (obj-count [this shape]
+        (if-let [^LinkedList lst (.get m shape)]
+          (.size lst)
+          0)))))
+

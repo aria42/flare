@@ -18,25 +18,26 @@
   {:num-iters 100
    :learning-rate 0.01})
 
-(defn run-batch! [factory get-loss-node batch]
+(defn run-batch! [factory get-loss-node batch cache]
   (loop [batch-loss 0.0 batch batch]
     (if-let [data (first batch)]
       (if-let [loss-node (get-loss-node data)]
-        (let [loss-node (compute/forward-pass! factory loss-node)
+        (let [loss-node (compute/forward-pass! factory loss-node cache)
               _ (tensors/copy! factory (:grad loss-node) [1.0])
               loss-val (-> loss-node :value seq first)]
           ;; side-effect to update gradients
-          (compute/backward-pass! factory loss-node)
+          (compute/backward-pass! factory loss-node cache)
           (recur (+ batch-loss 0.0 (double loss-val)) (next batch)))
         (recur batch-loss (next batch)))
       batch-loss)))
 
 (defn iter! [model optimizer get-loss-node data-gen opts]
   (let [total-loss (atom 0.0)
-        factory (model/tensor-factory model)]
+        factory (model/tensor-factory model)
+        cache (compute/cache factory 100)]
     (doseq [batch (data-gen)]
       (optimize/reset-batch! optimizer model)
-      (let [batch-loss (run-batch! factory get-loss-node batch)
+      (let [batch-loss (run-batch! factory get-loss-node batch cache)
             batch-info {:batch-loss batch-loss :model model :batch batch}]
         (when-let [reporter (:batch-reporter opts)]
           (report/update! reporter batch-info)

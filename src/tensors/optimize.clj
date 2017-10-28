@@ -27,7 +27,7 @@
       (tensors/transform!
        (model/tensor-factory model)
        (p/safe-get param-node :grad)
-       (fn ^double [^longs _ ^double x]
+       (fn ^double [^double x]
          (clip (* normalizer x) clip-min clip-max))))))
 
 (defn update-model! [optimizer model]
@@ -60,7 +60,7 @@
      factory 
      (p/safe-get params-node :value) 
      (p/safe-get params-node :grad)
-     (fn ^double [^longs _ ^double cur ^double grad]
+     (fn ^double [^double cur ^double grad]
        (- cur (* alpha grad))))))
 
 (defrecord Adadelta [factory ^double eta ^double gamma ^double epsilon]
@@ -78,23 +78,23 @@
       ;; updaete gradient squared
       ;; E[g2_t] = gamma E[g2_{t-1}] + (1-gamma)  g2_t
       (tensors/transform! factory exp-grad-sqs g
-       (fn ^double [^longs _ ^double cur ^double gi]
+       (fn ^double [^double cur ^double gi]
          (+ (* gamma cur) (* (- 1.0 gamma) gi gi))))
       ;; copy gradient to update
       (tensors/copy! factory delta g)
       ;; make update look like
       (tensors/transform! factory delta exp-grad-sqs
-        (fn ^double [^longs _ ^double gi ^double G2i]
+        (fn ^double [^double gi ^double G2i]
           (/ gi (Math/sqrt (+ epsilon G2i)))))
       (tensors/transform! factory delta exp-delta-sqs
-        (fn ^double [^longs _ ^double gi ^double d2i]
+        (fn ^double [^double gi ^double d2i]
           (* gi (Math/sqrt (+ epsilon d2i)))))
       ;; perform update
       (tensors/transform! factory v delta
-        (fn ^double [^longs _ ^double cur ^double u]
+        (fn ^double [^double cur ^double u]
           (- cur (* eta u))))
       (tensors/transform! factory exp-delta-sqs delta
-         (fn ^double [^longs _ ^double cur ^double di]
+         (fn ^double [^double cur ^double di]
            (+ (* gamma cur) (* (- 1.0 gamma) di di))))
       state)))
 

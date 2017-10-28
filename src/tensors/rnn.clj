@@ -11,6 +11,7 @@
   (cell-model [this])
   (output-dim [this])
   (input-dim [this])
+  (init-pair [this])
   (add-input! [this input last-output last-state]))
 
 (s/defn lstm-cell
@@ -25,11 +26,16 @@
                              (module/affine m (* 3 hidden-dim) [cat-input-dim])))
           gate (node/with-scope "gate"
                  (module/comp tanh
-                              (module/affine m hidden-dim [cat-input-dim])))]
+                              (module/affine m hidden-dim [cat-input-dim])))
+          factory (model/tensor-factory m)
+          zero  (tensors/zeros factory [hidden-dim])
+          init-output (node/constant factory "h0" zero)
+          init-state (node/constant factory "c0"  zero)]
       (reify RNNCell
         (cell-model [this] m)
         (output-dim [this] hidden-dim)
         (input-dim [this] input-dim)
+        (init-pair [this] [init-output init-state])
         (add-input! [this input last-output last-state]
           (tensors/validate-shape! :lstm-input [input-dim] (:shape input))
           (tensors/validate-shape! :lstm-hidden [hidden-dim] (:shape last-state))
@@ -53,9 +59,7 @@
   ([cell :- RNNCell inputs :- [Node] bidrectional? :- s/Bool]
    (let [factory (-> cell cell-model model/tensor-factory)
          out-dim (output-dim cell)
-         zero  (tensors/zeros factory [out-dim])
-         init-output (node/constant factory "h0" zero)
-         init-state (node/constant factory "c0"  zero)
+         [init-output init-state] (init-pair cell)
          ;; for bidirectional, concat reversed version of input
          inputs (if bidrectional?
                   (map #(cg/concat 0 %1 %2) inputs (reverse inputs))

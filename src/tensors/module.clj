@@ -3,7 +3,8 @@
   (:require [tensors.node :as node]
             [tensors.model :as model]
             [tensors.computation-graph :as cg]
-            [tensors.compute :as compute])
+            [tensors.compute :as compute]
+            [tensors.cache-pool :as cache-pool])
   (:import [tensors.node Node]))
 
 (defprotocol Module
@@ -29,7 +30,12 @@
    return the forward value of that node"
   [factory score-module & inputs]
   (when-let [n (apply graph score-module inputs)]
-    (compute/forward-pass! factory (cg/arg-max n))))
+    (let [cache (-> score-module meta :cache)
+          forward (compute/forward-pass! factory (cg/arg-max n) cache)
+          predict-val (-> forward :value seq)]
+      (when cache
+        (compute/free-tensors! forward cache))
+      predict-val)))
 
 (defn from-op [op]
   (when-not (satisfies? cg/GraphOp op)

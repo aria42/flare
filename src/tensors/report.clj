@@ -23,7 +23,7 @@
       (let [[num-correct total]
             (->> (get-data)
                  (map (fn [[x label]]
-                        (= label (-> x get-pred-node :value first))))
+                        (= label (first (get-pred-node x)))))
                  (reduce (fn [[num-correct total] correct?]
                            [(if correct? (inc num-correct) num-correct)
                             (inc total)])

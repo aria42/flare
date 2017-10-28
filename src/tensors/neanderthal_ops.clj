@@ -457,62 +457,76 @@
         (swap! *cached-zeros assoc shape z)
         (copy! z t)))))
 
+(defn -transform-type [fn]
+  (cond
+    (number? fn) :double
+    (instance? clojure.lang.IFn$DD fn) :dd-fn
+    (instance? clojure.lang.IFn$DDD fn) :ddd-fn
+    (instance? clojure.lang.IFn$ODD fn) :odd-fn
+    (instance? clojure.lang.IFn$ODDD fn) :oddd-fn
+    :else (throw (ex-info "Don't recognize fn"))))
 
 (defrecord Factory []
   tensors/PFactory
   (get-op [this op-key]
     ((get +tensor-ops+ op-key)))
   (transform! [this tensor get-val]
-    (let [constant? (number? get-val)
-          fixed-return (double (if constant? get-val 0.0))
-          dims (long-array (if (vctr? tensor) 1 2))
-          get-val ^IFn$ODD get-val]
-      (if (and constant? (zero? fixed-return))
+    (let [get-val ^IFn$ODD get-val
+          type (-transform-type get-val)
+          dims (when (identical? type :odd-fn)
+                 (long-array (if (vctr? tensor) 1 2)))
+          fixed-return (double (if (identical? type :double) get-val 0.0))]
+      (if (and (identical? type :double) (zero? get-val))
         (zero-fill this tensor)
         (alter! tensor
-                (case [constant? (vctr? tensor)]
-                  [true true]
-                  (fn tt ^double [^long i ^double x] fixed-return)
-                  [false true]
-                  (fn ft ^double [^long i ^double x]
+                (case [type (vctr? tensor)]
+                  [:double true]
+                  (fn cv ^double [^long i ^double x] fixed-return)
+                  [:odd-fn true]
+                  (fn ov ^double [^long i ^double x]
                     (aset dims (int 0) i)
-                    (.invokePrim get-val dims x))
-                  [true false]
-                  (fn tf ^double [^long i ^long j ^double x] fixed-return)
-                  [false false]
+                    (.invokePrim ^IFn$ODD get-val dims x))
+                  [:dd-fn true]
+                  (fn dv ^double [^long _ ^double x]
+                    (.invokePrim ^IFn$DD get-val x))
+                  [:double false]
+                  (fn dm ^double [^long i ^long j ^double x] fixed-return)
+                  [:odd-fn false]
                   (fn ff ^double [^long i ^long j ^double x]
                     (aset dims (int 0) i)
                     (aset dims (int 1) j)
-                    (.invokePrim get-val dims x)))))))
+                    (.invokePrim ^IFn$ODD get-val dims x))
+                  [:dd-fn false]
+                  (fn ff ^double [^long i ^long j ^double x]
+                    (.invokePrim ^IFn$DD get-val x)))))))
   (transform! [this tensor other-tensor get-val]
-    (let [ddd? (instance? IFn$DDD get-val)
+    (let [get-val ^IFn$ODD get-val
+          type (-transform-type get-val)
+          dims (when (identical? type :od-fn)
+                 (long-array (if (vctr? tensor) 1 2)))
+          fixed-return (double (if (identical? type :double) 1.0 0.0))
           shape (tensors/shape this tensor)
-          oshape (tensors/shape this other-tensor)
-          ;; only need array when fn takes it
-          dims (when-not ddd?
-                 (long-array (if (vctr? tensor) 1 2)))]
+          oshape (tensors/shape this other-tensor)]
      (when-not (= shape oshape)
        (throw (ex-info "Non-matching shapes"
                        {:shape shape :other-shape oshape})))
-     (when (and (not ddd?) (not (instance? IFn$ODDD get-val)))
-       (throw (ex-info "Bad get-val, must be IFn$DDD or IFn$ODDD primitive"
-                       {:bad-fn get-val})))
      (alter! tensor
-             (case [(vctr? tensor) ddd?]
-               [true true]
+             (case [type (vctr? tensor)]
+               [:ddd-fn true]
                (fn tt ^double [^long i ^double x]
                  (let [other-val (real/entry other-tensor i)]
                    (.invokePrim ^IFn$DDD get-val x other-val)))
-               [false true]
+               [:oddd-fn true]
+               (fn tf ^double [^long i  ^double x]
+                 (aset dims (int 0) i)
+                 (aset )
+                 (let [other-val (real/entry other-tensor i)]
+                   (.invokePrim ^IFn$ODDD get-val dims x other-val)))
+               [:ddd-fn false]
                (fn ft ^double [^long i ^long j ^double x]
                  (let [other-val (real/entry other-tensor i j)]
                    (.invokePrim ^IFn$DDD get-val x other-val)))
-               [true false]
-               (fn tf ^double [^long i  ^double x]
-                 (aset dims (int 0) i)
-                 (let [other-val (real/entry other-tensor i)]
-                   (.invokePrim ^IFn$ODDD get-val dims x other-val)))
-               [false false]
+               [:oddd-fn false]
                (fn ff ^double [^long i ^long j ^double x]
                  (aset dims (int 0) i)
                  (aset dims (int 1) j)

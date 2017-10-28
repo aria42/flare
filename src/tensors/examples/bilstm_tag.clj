@@ -81,8 +81,11 @@
         gen-batches #(partition-all 32 train-data)
         factory (no/factory)
         model (model/simple-param-collection factory)
-        ;; need to provide forward-computed graph for loss
-        classifier (lstm-sent-classifier model emb lstm-size num-classes)
+        ;; classifier can use a cache to avoid
+        ;; re-allocating tensors across prediction
+        classifier (with-meta
+                     (lstm-sent-classifier model emb lstm-size num-classes)
+                     {:cache (compute/cache factory 1000)})
         loss-fn (fn [[sent tag]]
                     (-> classifier
                         (with-meta {:train? true})

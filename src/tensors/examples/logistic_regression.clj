@@ -2,7 +2,6 @@
 (ns tensors.examples.logistic-regression
   (:gen-class)
   (:require [tensors.neanderthal-ops :as no]
-            [tensors.nd4j-ops :as nd4j-ops]
             [tensors.compute :as compute]
             [tensors.core :as tensors]
             [tensors.model :as model]
