@@ -49,7 +49,7 @@
      :value (tensors/zeros factory shape)
      :ref-name (scoped-name input-name)}))
   ([input-name :- String shape :- tensors/Shape]
-   (input @tensors/*factory* input-name shape))
+   (input @tensors/*factory input-name shape))
   ([shape :- tensors/Shape]
    (input (name (gensym "input")) shape)))
 
@@ -64,7 +64,7 @@
        :value t
        :ref-name (scoped-name input-name)})))
   ([input-name :- String data]
-   (constant @tensors/*factory* input-name data))
+   (constant @tensors/*factory input-name data))
   ([data]
    (constant (name (gensym "input")) data)))
 

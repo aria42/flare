@@ -80,13 +80,19 @@
   (shape [this t]
     "return the shape of the tennsor as integer (clojure) vector"))
 
-(def *factory*
+
+(defprotocol -InternalPFactory
+  "protocols for internal understanding of performance/correctness,
+   not meant to be used except by 'experts'"
+  (perf-info [this] "map of op keys and performance characteristics"))
+
+(def *factory
   "atom for global factory to avoid passing into operations"
   (atom nil))
 
 
 (defn set-factory! [factory]
-  (reset! *factory* factory))
+  (reset! *factory factory))
 
 (defn with-cache [factory num-to-cache]
   (with-meta factory
