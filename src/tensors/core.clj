@@ -84,7 +84,7 @@
 (defprotocol -InternalPFactory
   "protocols for internal understanding of performance/correctness,
    not meant to be used except by 'experts'"
-  (perf-info [this] "map of op keys and performance characteristics"))
+  (debug-info [this] "map of debug/perf info"))
 
 (def *factory
   "atom for global factory to avoid passing into operations"

@@ -8,7 +8,8 @@
             [tensors.cache-pool :as cache-pool]
             [tensors.model :as model])
   (:import [tensors.node Node]
-           [java.util LinkedList]))
+           [java.util LinkedList]
+           [java.util.concurrent.atomic AtomicLong]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Compiled Graph Protocols + Operations
@@ -117,7 +118,8 @@
   ([factory ^Node target cache]
    (let [nodes (graph/topographic target)
          computed-nodes (java.util.HashMap. (count nodes))
-         get-canonical (fn [^Node node] (.get computed-nodes (.ref-name node)))]
+         get-canonical (fn [^Node node] (.get computed-nodes (.ref-name node)))
+         perf-map (-> factory meta (get-in [:debug :perf]))]
      ;; Copy input values to node tensors
      (doseq [^Node onode nodes]
        (when-not (get-canonical onode)
@@ -130,10 +132,18 @@
                (.add canonical-children cc)))
            (let [node (assoc onode :children canonical-children)
                  ^Node node (with-tensors node factory cache)]
-             (.put computed-nodes 
+             (.put computed-nodes
                    (.ref-name node)
                    (if (seq (.children node))
-                     (forward-node-pass! (node-tensor-op factory node) node)
+                     (let [start (System/nanoTime)
+                           tensor-op (node-tensor-op factory node)
+                           node (forward-node-pass! tensor-op  node)
+                           end (System/nanoTime)
+                           ok (-> node :graph-op cg/op-key)
+                           sum-nanos (get-in perf-map [ok :forward])]
+                       (when sum-nanos
+                         (.getAndAdd ^AtomicLong sum-nanos (- end start)))
+                       node)
                      node))))))
      (.get computed-nodes (.ref-name target)))))
 
@@ -142,9 +152,17 @@
    the graph computation, will write to `:grad` key for all nodes
    that have gradients (basically non-inputs) in graph"
   ([factory ^Node target cache]
-   (let [nodes (reverse (graph/post-order-nodes target))]
+   (let [nodes (reverse (graph/post-order-nodes target))
+         perf-map (-> factory meta (get-in [:debug :perf]))]
      (doseq [^Node n nodes :when (identical? :op (.type n))]
-       (backward-node-pass! (node-tensor-op factory n) n)
+       (let [start (System/nanoTime)
+             tensor-op (node-tensor-op factory n)
+             node (backward-node-pass! tensor-op  n)
+             end (System/nanoTime)
+             op-key (-> n :graph-op cg/op-key)
+             sum-nanos (get-in perf-map [op-key :backward])]
+         (when sum-nanos
+           (.getAndAdd ^AtomicLong sum-nanos (- end start))))
        (when (and cache (identical? (.type n) :op))
          (cache-pool/return-obj cache (.shape n) (.value n))
          (cache-pool/return-obj cache (.shape n) (.grad n))))))

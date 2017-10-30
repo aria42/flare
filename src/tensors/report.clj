@@ -30,6 +30,12 @@
                          [0 0]))]
         {k {:acc (/ (double num-correct) total) :n total}}))))
 
+(defn callback [f]
+  (reify Reporter
+    (update! [this info])
+    (clear! [this])
+    (gen [this] (f))))
+
 (defn avg-loss []
   (let [sum (atom 0.0)
         n (atom 0)]

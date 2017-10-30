@@ -95,15 +95,18 @@
         train-opts {:num-iters 100
                     :optimizer (optimize/->Adadelta factory 1.0 0.9 1e-6)
                     ;; report train/test accuracy each iter
-                    :iter-reporter (report/concat
-                                    (report/accuracy
-                                     :train-accuracy
-                                     (constantly train-data)
-                                     predict-fn)
-                                    (report/accuracy
-                                     :test-accuracy
-                                     (constantly test-data)
-                                     predict-fn))
+                    :iter-reporter
+                    (report/concat
+                     (report/accuracy
+                      :train-accuracy
+                      (constantly train-data)
+                      predict-fn)
+                     (report/accuracy
+                      :test-accuracy
+                      (constantly test-data)
+                      predict-fn)
+                     (report/callback
+                      #(tensors/debug-info factory)))
                     :learning-rate 1}]
     (println "Params " (map first (seq model)))
     (println "Total # params " (model/total-num-params model))
@@ -117,7 +120,6 @@
              :train-file "data/sentiment-train10k.txt"
              :test-file "data/sentiment-test10k.txt"
              :emb-size 50}))
-
 (defn -main [& args]
   (let [parse (parse-opts args cli-options)]
     (println (:options parse))

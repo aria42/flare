@@ -13,6 +13,7 @@
             [tensors.cache-pool :as cache-pool])
   (:import [tensors.node Node]
            [org.apache.commons.math3.util FastMath]
+           [java.util.concurrent.atomic AtomicLong]
            [clojure.lang IFn$DD IFn$ODD IFn$DDD IFn$ODDD]))
 
 (defn -mk-matrix 
@@ -92,7 +93,7 @@
         (if (matrix? Y)
           ;; dX += dZ Y'
           (np/mm! 1.0 dZ (trans Y) dX)
-          (np/mm! 1.0 (view-ge dZ) (trans (view-ge Y)) dX)))
+          (np/rk! dZ Y dX)))
       ;; update dY
       (when dY
         ;; dY += X' dZ
@@ -466,7 +467,7 @@
     (instance? clojure.lang.IFn$ODDD fn) :oddd-fn
     :else (throw (ex-info "Don't recognize fn"))))
 
-(defrecord Factory []
+(defrecord ^:private Factory []
   tensors/PFactory
   (get-op [this op-key]
     ((get +tensor-ops+ op-key)))
@@ -556,12 +557,23 @@
                           [(mrows tensor!) (ncols tensor!)])]
               (copy! (-from-nums nums shape) tensor!))))
   (zeros [this shape]
-    (-zeros shape)))
+    (-zeros shape))
+
+
+  tensors/-InternalPFactory
+  (debug-info [this]
+    {:debug
+     {:perf
+      (sort-by (fn [e]
+                 (let [{:keys [^AtomicLong forward, ^AtomicLong backward]} (val e)]
+                   (- (+ (.get forward) (.get backward)))))
+               (get-in (meta this) [:debug :perf]))}}))
+
+(defn -build-perf-map []
+  (p/for-map [k (keys +tensor-ops+)]
+             k
+             {:forward (AtomicLong. 0)
+              :backward (AtomicLong. 0)}))
 
 (defn factory [& [num-to-cache]]
-  (let [f (->Factory)]
-    f
-    #_(with-meta f
-      {:cache (cache-pool/make
-               (or num-to-cache 1)
-               (fn [shape] (tensors/zeros f shape)))})))
+  (with-meta (->Factory) {:debug {:perf (-build-perf-map)}}))
