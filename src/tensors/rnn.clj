@@ -17,7 +17,9 @@
 (s/defn lstm-cell
   [m :- model/PModel input-dim :- s/Int hidden-dim :- s/Int]
   (let [cat-input-dim (+ input-dim hidden-dim)
-        ;; W_[i, o, f, g] [x, h_{t-1}] 
+        ;; stack (input, output, forget, gate) params
+        ;; to have a single large affien operation
+        ;; W_[i, o, f, g] [x, h_{t-1}] + b_[i, o, f, g]
         activations (module/affine m (* 4 hidden-dim) [cat-input-dim])
         factory (model/tensor-factory m)
         zero  (tensors/zeros factory [hidden-dim])
@@ -29,14 +31,13 @@
       (input-dim [this] input-dim)
       (init-pair [this] [init-output init-state])
       (add-input! [this input last-output last-state]
-        (tensors/validate-shape! :lstm-input [input-dim] (:shape input))
-        (tensors/validate-shape! :lstm-hidden [hidden-dim] (:shape last-state))
+        (tensors/validate-shape! [input-dim] (:shape input))
+        (tensors/validate-shape! [hidden-dim] (:shape last-state))
         (let [x (cg/concat 0 input last-output)
               acts (module/graph activations x)
               ;; split (i,o,f) and state
               [iof, state] (cg/split acts 0 (* 3 hidden-dim))
               ;; split iof into (input, forget, output)
-              ;; at [0, hidden-dim), [hidden-dim, 2*hidden-dim), [2*hidden-dim,..)
               [input-probs forget-probs output-probs]
                 (cg/split (cg/sigmoid iof) 0 hidden-dim (* 2 hidden-dim))
               state (cg/tanh state)

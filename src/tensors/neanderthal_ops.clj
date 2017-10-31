@@ -9,7 +9,8 @@
             [uncomplicate.neanderthal.real :as real]
             [schema.core :as s]
             [plumbing.core :as p]
-            [tensors.cache-pool :as cache-pool])
+            [tensors.cache-pool :as cache-pool]
+            [uncomplicate.neanderthal.vect-math :as vect-math])
   (:import [tensors.node Node]
            [org.apache.commons.math3.util FastMath]
            [java.util LinkedList]
@@ -376,6 +377,20 @@
             (recur (next inputs) (+ offset len)))))
       node)))
 
+(defn element-wise-backward! [^IFn$DD dfx node]
+  (let [dO (p/safe-get node :grad)]
+    (when-let [dX (-> node :children first :grad)]
+      (let [X (p/safe-get node :value)]
+        (if (vctr? dX)
+          (alter! dX (fn ^double [^long i ^double cur]
+                       (+ cur
+                          (* (real/entry dO i)
+                             (.invokePrim dfx (real/entry X i))))))
+          (alter! dX (fn ^double [^long i ^long j ^double cur]
+                       (+ cur
+                          (* (real/entry dO i j)
+                             (.invokePrim dfx (real/entry X i j)))))))))))
+
 (defrecord ElementwiseTransformOp
   [^IFn$DD fx ^IFn$DD dfx]
   compute/TensorOp
@@ -389,18 +404,21 @@
                        (.invokePrim fx (real/entry X i))))
       node))
   (backward-node-pass! [this node]
-    (let [dO (p/safe-get node :grad)]
-      (when-let [dX (-> node :children first :grad)]
-        (let [X (p/safe-get node :value)]
-          (if (vctr? dX)
-            (alter! dX (fn ^double [^long i ^double cur]
-                         (+ cur
-                            (* (real/entry dO i)
-                               (.invokePrim dfx (real/entry X i))))))
-            (alter! dX (fn ^double [^long i ^long j ^double cur]
-                         (+ cur
-                            (* (real/entry dO i j)
-                               (.invokePrim dfx (real/entry X i j))))))))))))
+    (element-wise-backward! dfx node)))
+
+(defrecord VecMathTransformOp
+  [vec-fx ^IFn$DD dfx]
+  compute/TensorOp
+  (ensure-valid?! [this [X]]
+    (ensure-valid-shape?! (:shape X))
+    true)
+  (forward-node-pass! [this node]
+    (let [output (p/safe-get node :value)
+          X (-> node :children first :value)]
+      (vec-fx X output)
+      node))
+  (backward-node-pass! [this node]
+    (element-wise-backward! dfx node)))
 
 (defn ^:private ^:static sigmoid
   ^double [^double x]
@@ -415,10 +433,11 @@
                (sigmoid x))
              (fn -sigmoid-d ^double [^double x]
                (let [sig (sigmoid x)]
-                 (* sig (- 1.0 sig))))]
-   ;; f(x) = tanh(x), df(X) = 1 - tan(x)^2
-   :tanh [(fn -tanh ^double [^double x]
-            (FastMath/tanh x))
+                 (* sig (- 1.0 sig))))]})
+
+(def ^:private +vec-math-op+
+  {;; f(x) = tanh(x), df(X) = 1 - tan(x)^2
+   :tanh [vect-math/tanh!
           (fn -tanh-d ^double [^double x]
             (let [t (FastMath/tanh x)]
               (- 1.0 (* t t))))]})
@@ -449,6 +468,9 @@
     :dropout ->DropoutTensorOp
     :cross-entropy-loss ->CrossEntropyLossTensorOp
     :arg-max ->ArgMaxTensorOp}
+   (p/map-vals
+    (fn [[fx dfx]] #(->VecMathTransformOp fx dfx))
+    +vec-math-op+)
    (p/map-vals
     (fn [[fx dfx]] #(->ElementwiseTransformOp fx dfx))
     +elementwise-op+)))

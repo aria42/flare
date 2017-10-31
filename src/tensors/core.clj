@@ -31,10 +31,13 @@
 (defn scalar-shape? [shape]
   (= shape [1]))
 
-(defn validate-shape! [key expected-shape given-shape]
-  (when-not (= expected-shape given-shape)
-    (let [data {:expected expected-shape :given given-shape :key key}]
-      (throw (ex-info "Got unexpected shape" data)))))
+(defn validate-shape!
+  ([expected-shape given-shape]
+   (validate-shape! :bad-shape expected-shape given-shape))
+  ([key expected-shape given-shape]
+   (when-not (= expected-shape given-shape)
+     (let [data {:expected expected-shape :given given-shape :key key}]
+       (throw (ex-info "Got unexpected shape" data))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
