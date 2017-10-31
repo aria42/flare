@@ -1,4 +1,4 @@
-# tensors
+# flare
 
 A Clojure library for dynamic neural nets (e.g., PyTorch, DynNet). Mostly for learning purposes, but totally useable and pretty performant (see [Performance]("#perf") below). Current features:
 
