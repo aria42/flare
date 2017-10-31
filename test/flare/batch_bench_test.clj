@@ -1,6 +1,6 @@
 (ns flare.batch-bench-test
   (:use [uncomplicate.neanderthal core native]
-        [tensors neanderthal-ops])
+        [flare neanderthal-ops])
   (:require [flare.graph :as graph]
             [flare.core :as flare]
             [flare.compute :as compute]
