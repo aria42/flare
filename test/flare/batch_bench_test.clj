@@ -3,7 +3,7 @@
         [tensors neanderthal-ops])
   (:require [flare.graph :as graph]
             [flare.core :as flare]
-            [tensors.compute :as compute]
+            [flare.compute :as compute]
             [uncomplicate.neanderthal.core :as np]
             [uncomplicate.neanderthal.native :as native]
             [uncomplicate.neanderthal.real :as real]
