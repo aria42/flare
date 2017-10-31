@@ -1,6 +1,5 @@
 (ns tensors.batch-bench-test
   (:use [uncomplicate.neanderthal core native]
-        [criterium core]
         [tensors neanderthal-ops])
   (:require [tensors.graph :as graph]
             [tensors.core :as tensors]

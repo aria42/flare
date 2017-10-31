@@ -7,11 +7,9 @@
   :jvm-opts ["-mx2000m" "-XX:+UnlockDiagnosticVMOptions" "-XX:+DebugNonSafepoints" "-XX:+UnlockCommercialFeatures" "-XX:+FlightRecorder" "-Djava.rmi.server.hostname=localhost" "-server"]
   :aot :all
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [org.nd4j/nd4j-native "0.9.1"]
-                 [org.nd4j/nd4j-api "0.9.1"]
                  [prismatic/schema "1.1.6"]
                  [prismatic/plumbing "0.5.4"]
                  [uncomplicate/neanderthal "0.16.1"]
-                 [criterium "0.4.4"]
                  [org.apache.commons/commons-math3 "3.0"]
-                 [org.clojure/tools.cli "0.3.5"]])
+                 [org.clojure/tools.cli "0.3.5"]]
+  :dev-dependencies [[criterium "0.4.4"]])
