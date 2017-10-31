@@ -211,7 +211,7 @@
       (let [forward-node (compute/forward-node-pass! op node)]
         (is (<
              (l2-dist
-              (:tensors.neanderthal-ops/probs forward-node)
+              (:flare.neanderthal-ops/probs forward-node)
               (dv [ 0.186 0.307 0.506]))
              0.001))
         (let [loss-scalar (first (:value forward-node))
