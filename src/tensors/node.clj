@@ -1,7 +1,8 @@
 (ns tensors.node
   (:require [clojure.string :as str]
             [schema.core :as s]
-            [tensors.core :as tensors])
+            [tensors.core :as tensors]
+            [tensors.node :as node])
   (:import [clojure.lang Keyword]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -31,10 +32,34 @@
     (.append sb node-name)
     (.toString sb)))
 
-(defmacro with-scope [^String scope-name & body]
+(defmacro with-scope
+  "everything in body gets the `scope` appended to default scope"
+  [^String scope-name & body]
   `(binding [*current-input-scope*
              (conj *current-input-scope* (name ~scope-name))]
      ~@body))
+
+(defmacro let-scope
+  "Like `let` except the right-hand-side of each let binding
+   is wrapped in `node/with-scope` using the string name of the
+   left-hand-side variable. The goal is to properly nest the names
+   of all nodes and parameters in graph
+
+  ```clojure
+     (let-scope
+       [left (module/affine model 10 [5])
+        right (module/affine model 10 [5])]
+       (cg/+ left right))```
+
+
+  Then the model will have `(\"left/W\",\"left/b\", \"right/W\", \"right/b\")`"
+  [bindings & body]
+  (let [new-bindings (->> bindings
+                          (partition-all 2)
+                          (mapcat (fn [[k v]]
+                                    [k `(node/with-scope ~(name k) ~v)])))]
+    `(let ~(vec new-bindings)
+         ~@body)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Making Nodes

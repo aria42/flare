@@ -6,13 +6,13 @@
             [tensors.core :as tensors]
             [tensors.compute :as compute]
             [uncomplicate.neanderthal.core :as np]
-            [uncomplicate.neanderthal.native :as native]
             [uncomplicate.neanderthal.real :as real]
             [schema.core :as s]
             [plumbing.core :as p]
             [tensors.cache-pool :as cache-pool])
   (:import [tensors.node Node]
            [org.apache.commons.math3.util FastMath]
+           [java.util LinkedList]
            [java.util.concurrent.atomic AtomicLong]
            [clojure.lang IFn$DD IFn$ODD IFn$DDD IFn$ODDD]))
 
@@ -400,8 +400,7 @@
             (alter! dX (fn ^double [^long i ^long j ^double cur]
                          (+ cur
                             (* (real/entry dO i j)
-                               (.invokePrim dfx (real/entry X i j)))))))))
-      node)))
+                               (.invokePrim dfx (real/entry X i j))))))))))))
 
 (defn ^:private ^:static sigmoid
   ^double [^double x]
@@ -423,6 +422,20 @@
           (fn -tanh-d ^double [^double x]
             (let [t (FastMath/tanh x)]
               (- 1.0 (* t t))))]})
+
+(defn process-perf [perf-map]
+  (let [total-ns (p/sum (fn [e]
+                          (let [{:keys [forward, backward]} (val e)]
+                            (+ (.get ^AtomicLong forward)
+                               (.get ^AtomicLong backward))))
+                        perf-map)
+        to-pct (fn [^AtomicLong l]
+                 (/ (.get l) (double total-ns)))]
+    (p/for-map [[k v] perf-map]
+               k
+               (-> v
+                   (update-in [:forward] to-pct)
+                   (update-in [:backward] to-pct)))))
 
 (def ^:private +tensor-ops+
   (merge
@@ -564,10 +577,11 @@
   (debug-info [this]
     {:debug
      {:perf
-      (sort-by (fn [e]
-                 (let [{:keys [^AtomicLong forward, ^AtomicLong backward]} (val e)]
-                   (- (+ (.get forward) (.get backward)))))
-               (get-in (meta this) [:debug :perf]))}}))
+      (->> (get-in (meta this) [:debug :perf])
+           process-perf
+           (sort-by (fn [e]
+                      (let [{:keys [forward, backward]} (val e)]
+                        (- (+ forward backward))))))}}))
 
 (defn -build-perf-map []
   (p/for-map [k (keys +tensor-ops+)]
@@ -576,4 +590,5 @@
               :backward (AtomicLong. 0)}))
 
 (defn factory [& [num-to-cache]]
-  (with-meta (->Factory) {:debug {:perf (-build-perf-map)}}))
+  (let [f (->Factory)]
+    (with-meta f (assoc (meta f) :debug {:perf (-build-perf-map)}))))

@@ -43,25 +43,24 @@
    (-> opts :embed-file io/reader embeddings/read-text-embedding-pairs)))
 
 (defn lstm-sent-classifier [model word-emb lstm-size num-classes]
-  (let [emb-size (embeddings/embedding-size word-emb)
-        ;; for bi-directional
-        input-size (* 2 emb-size)
-        hidden-size (* 2 lstm-size)
-        cell (node/with-scope "layer0"
-               (rnn/lstm-cell model input-size hidden-size))
-        factory (model/tensor-factory model)
-        hidden->logits (node/with-scope "hidden->logits"
-                         (module/affine model num-classes [hidden-size]))]
+  (node/let-scope
+      ;; let-scope so the parameters get smart-nesting
+      [emb-size (embeddings/embedding-size word-emb)
+       num-dirs 2
+       input-size (* num-dirs emb-size)
+       hidden-size (* num-dirs lstm-size)
+       lstm (rnn/lstm-cell model input-size hidden-size)
+       factory (model/tensor-factory model)
+       hidden->logits (module/affine model num-classes [hidden-size])]
     (reify
-      module/Module
+      module/PModule
       ;; build logits
       (graph [this sent]
         (when-let [inputs (seq (embeddings/sent-nodes factory word-emb sent))]
-          (let [[outputs _] (rnn/build-seq cell inputs true)
+          (let [[outputs _] (rnn/build-seq lstm inputs (= num-dirs 2))
                 train? (:train? (meta this))
                 hidden (last outputs)
-                hidden (if train? (cg/dropout 0.5 hidden) hidden)
-                ]
+                hidden (if train? (cg/dropout 0.5 hidden) hidden)]
             (module/graph hidden->logits hidden))))
       ;; build loss node for two-arguments
       (graph [this sent label]
@@ -83,21 +82,17 @@
         model (model/simple-param-collection factory)
         ;; classifier can use a cache to avoid
         ;; re-allocating tensors across prediction
-        classifier (with-meta
-                     (lstm-sent-classifier model emb lstm-size num-classes)
-                     {:cache (compute/cache factory 1000)})
+        classifier (lstm-sent-classifier model emb lstm-size num-classes)
         loss-fn (fn [[sent tag]]
                     (-> classifier
                         (with-meta {:train? true})
                         (module/graph sent tag)))
-        predict-fn (fn [sent]
-                     (module/predict factory classifier sent))
+        predict-fn (module/predict-fn factory classifier)
         train-opts {:num-iters 100
                     :optimizer (optimize/->Adadelta factory 1.0 0.9 1e-6)
                     ;; report train/test accuracy each iter
                     :iter-reporter
-                    (report/concat
-                     (report/accuracy
+                    [(report/accuracy
                       :train-accuracy
                       (constantly train-data)
                       predict-fn)
@@ -106,7 +101,7 @@
                       (constantly test-data)
                       predict-fn)
                      (report/callback
-                      #(tensors/debug-info factory)))
+                      #(tensors/debug-info factory))]
                     :learning-rate 1}]
     (println "Params " (map first (seq model)))
     (println "Total # params " (model/total-num-params model))
@@ -120,6 +115,7 @@
              :train-file "data/sentiment-train10k.txt"
              :test-file "data/sentiment-test10k.txt"
              :emb-size 50}))
+
 (defn -main [& args]
   (let [parse (parse-opts args cli-options)]
     (println (:options parse))

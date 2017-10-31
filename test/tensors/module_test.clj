@@ -14,8 +14,8 @@
         m (model/simple-param-collection factory)
         aff (affine m 3 [2])
         x (node/constant factory "x" [1 2])]
-    (model/fix-param! m "affine/W" [[1 2] [3 4] [5 6]])
-    (model/fix-param! m "affine/b" [1 1 1])
+    (model/fix-param! m "W" [[1 2] [3 4] [5 6]])
+    (model/fix-param! m "b" [1 1 1])
     (is (= [6.0 12.0 18.0]
            (-> (compute/forward-pass! factory (graph aff x))
                :value

@@ -1,7 +1,7 @@
 (ns tensors.core
   (:require [schema.core :as s]
             [tensors.cache-pool :as cache-pool])
-  (:import [java.util Random]))
+  (:import [java.util Random LinkedList]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Tensor Shape
@@ -94,8 +94,26 @@
 (defn set-factory! [factory]
   (reset! *factory factory))
 
+(defn cache [factory num-to-cache]
+  (let [m (java.util.HashMap.)]
+    (reify
+      cache-pool/-CachePool
+      (get-obj [this shape]
+        (if-let [^LinkedList lst (.get m shape)]
+          (if-let [t (.poll lst)]
+            (do (transform! factory t 0.0)
+                t)
+            (zeros factory shape))
+          (zeros factory shape)))
+      (return-obj [this shape t]
+        (if-let [^LinkedList lst (.get m shape)]
+          (.offer lst t)
+          (.put m shape (doto (LinkedList.) (.add t)))))
+      (obj-count [this shape]
+        (if-let [^LinkedList lst (.get m shape)]
+          (.size lst)
+          0)))))
+
 (defn with-cache [factory num-to-cache]
   (with-meta factory
-    {:cache (cache-pool/make
-             (or num-to-cache 100)
-             (fn [shape] (zeros factory shape)))}))
+    (assoc (meta factory) :cache (cache factory num-to-cache))))

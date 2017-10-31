@@ -1,24 +1,33 @@
 (ns tensors.train
-  (:require [schema.core :as s]
-            [tensors.model :as model]
-            [tensors.compute :as compute]
-            [tensors.core :as tensors]
-            [tensors.report :as report]
-            [tensors.optimize :as optimize]
-            [plumbing.core :as p]
-            [tensors.graph :as graph]))
+  (:require
+   [clojure.pprint :as pprint]
+   [schema.core :as s]
+   [tensors.model :as model]
+   [tensors.compute :as compute]
+   [tensors.core :as tensors]
+   [tensors.report :as report]
+   [tensors.optimize :as optimize]
+   [plumbing.core :as p]
+   [tensors.graph :as graph]
+   [tensors.module :as module]))
 
 (s/defschema TrainOpts
   {(s/optional-key :num-iters) s/Int
    (s/optional-key :optimizer) optimize/Optimizer
    (s/optional-key :learning-rate) s/Num
-   (s/optional-key :iter-reporter) report/Reporter})
+   (s/optional-key :iter-reporter) [report/Reporter]})
 
 (def +default-train-opts+
   {:num-iters 100
    :learning-rate 0.01})
 
-(defn run-batch! [factory get-loss-node batch cache]
+(defn run-batch!
+  "run forward/backward passes for each of the loss graphs created
+   by `loss-module` on the batch.
+
+   Each entry in batch as treated as arguments to `module/graph`
+   to build an expression for example loss"
+  [factory get-loss-node batch cache]
   (loop [batch-loss 0.0 batch batch]
     (if-let [data (first batch)]
       (if-let [loss-node (get-loss-node data)]
@@ -37,16 +46,8 @@
         cache (compute/cache factory 100)]
     (doseq [batch (data-gen)]
       (optimize/reset-batch! optimizer model)
-      (let [batch-loss (run-batch! factory get-loss-node batch cache)
-            batch-info {:batch-loss batch-loss :model model :batch batch}]
-        (when-let [reporter (:batch-reporter opts)]
-          (report/update! reporter batch-info)
-          (when-let [r (report/gen reporter)]
-            (clojure.pprint/pprint r)))
-        (swap! total-loss + batch-loss)
-        (when-let [callback (:batch-callback opts)]
-          (when-let [report (callback model batch batch-loss)]
-            (clojure.pprint/pprint report))))
+      (let [batch-loss (run-batch! factory get-loss-node batch cache)]
+        (swap! total-loss + batch-loss))
       (optimize/update-model! optimizer model))
     @total-loss))
 
@@ -54,37 +55,25 @@
   "`data-gen` should be called to yield a lazy sequence over batches. Each batch
    is a sequence of {input-name clj-tensor} maps (see schema above)"
   ([model :- model/PModel
-    get-loss-node :- (s/=> tensors.node.Node s/Any)
-    data-gen
+    get-loss-node 
+    data-batch-fn
     opts :- TrainOpts]
    (let [factory (model/tensor-factory model)
-         optimizer (get opts :optimizer (optimize/->SGD factory 0.1))
+         optimizer (:optimizer opts (optimize/->Adadelta factory 1.0 0.9 1e-6))
          opts (merge +default-train-opts+ opts)]
-     (println "Optimizing with " (type optimizer))
+     (println "Optimizing with" (type optimizer))
      (optimize/init-model! optimizer model)
      (dotimes [iter (:num-iters opts)]
-       (when-let [reporter (:batch-reporter opts)]
-         (report/clear! reporter))
-       (when-let [reporter (:iter-reporter opts)]
+       (doseq [reporter (:iter-reporter opts)]
          (report/clear! reporter))
        (printf "Iteration %d\n" iter)
        (let [time (System/currentTimeMillis)
-             loss (iter! model optimizer get-loss-node data-gen opts)]
-         (when-let [reporter (:iter-reporter opts)]
+             loss (iter! model optimizer get-loss-node data-batch-fn opts)]
+         (doseq [reporter (:iter-reporter opts)]
            (when-let [r (report/gen reporter)]
-             (clojure.pprint/pprint r)))
+             (pprint/pprint r)))
          (let [delta-ms (- (System/currentTimeMillis) time)]
            (printf "End of iteration %d: %.3f (%d ms) \n" iter loss delta-ms)
            (.flush System/out))))))
-  ([model get-loss-node data-gen]
-   (train! model get-loss-node data-gen {})))
-
-
-(defn static-train!
-  [model loss-node data-gen opts]
-  (let [factory (model/tensor-factory model)]
-    (train!
-     model
-     (fn [input->vals] (compute/with-inputs! factory loss-node input->vals))
-     data-gen
-     opts)))
+  ([model get-loss-node data-batch-fn]
+   (train! model get-loss-node data-batch-fn {})))

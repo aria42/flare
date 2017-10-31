@@ -14,6 +14,8 @@
             [tensors.node :as node]
             [tensors.report :as report]))
 
+(tensors/set-factory! (no/factory))
+
 (defn data-generator [num-classes num-feats]
   (let [r (java.util.Random. 0)
         W (dge num-classes num-feats)
@@ -33,29 +35,32 @@
         label (node/input "label" [1])
         aff (module/affine model num-classes [num-feats])
         activations (module/graph aff feat-vec)
-        predict (cg/arg-max activations)
         loss (cg/cross-entropy-loss activations label)]
-    [loss predict]))
+    [loss activations]))
 
 (defn train [{:keys [num-examples, num-iters, num-feats, num-batch] :as opts}]
   (println "options " opts)
   (let [num-classes 5
         factory (no/factory)
         m (model/simple-param-collection factory)
-        [loss predict] (logistic-regression m num-classes num-feats)
-        get-data (data-generator  num-classes num-feats)
+        [loss activations] (logistic-regression m num-classes num-feats)
+        get-data (data-generator num-classes num-feats)
         data (doall (take num-examples (repeatedly get-data)))
         test-data (doall (take num-examples (repeatedly get-data)))
         batch-gen #(partition num-batch data)
+        predict-fn (module/predict-fn factory (module/static factory activations))
+        loss-node-fn (fn [example]
+                       (compute/with-inputs! factory loss example)
+                       loss)
         train-opts {:num-iters num-iters
-                    :learning-rate 0.01
-                    :iter-reporter (report/accuracy
-                                    (fn []
-                                      (for [x test-data]
-                                        [x (first (get x "label"))]))
-                                    (fn [x]
-                                      (compute/forward-pass! predict factory x)))}]
-    (train/static-train! m loss batch-gen train-opts)))
+                    :learning-rate 0.1
+                    :iter-reporter
+                    [(report/accuracy
+                      :test-accuracy
+                      #(for [t test-data]
+                         [(dissoc t "label") (first (get t "label"))])
+                      predict-fn)]}]
+    (train/train! m loss-node-fn batch-gen train-opts)))
 
 (def cli-options
   ;; An option with a required argument
