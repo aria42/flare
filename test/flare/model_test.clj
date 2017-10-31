@@ -1,11 +1,11 @@
-(ns tensors.model-test
-  (:require [tensors.model :refer :all]
+(ns flare.model-test
+  (:require [flare.model :refer :all]
             [clojure.test :refer :all]
-            [tensors.neanderthal-ops :as no]
-            [tensors.core :as tensors]
-            [tensors.computation-graph :as cg]
-            [tensors.neanderthal-ops :as no]
-            [tensors.model :as model]))
+            [flare.neanderthal-ops :as no]
+            [flare.core :as flare]
+            [flare.computation-graph :as cg]
+            [flare.neanderthal-ops :as no]
+            [flare.model :as model]))
 
 (deftest uniform-test
   (let [oracle (java.util.Random. 0)
@@ -41,9 +41,9 @@
           x (add-params! m [2 3] :name "x")
           y (add-params! m [3 2] :name "y")
           z (add-params! m [3] :name "z")]
-      (tensors/copy! f (:value x) (range 6))
-      (tensors/copy! f (:value y) (range 6 12))
-      (tensors/copy! f (:value z) (range 12 15))
+      (flare/copy! f (:value x) (range 6))
+      (flare/copy! f (:value y) (range 6 12))
+      (flare/copy! f (:value z) (range 12 15))
       ;; should be [0.0-15.0)
       (let [xs (model/to-doubles m)]
         (is (= (map double (range 15)) (seq xs))))

@@ -1,19 +1,19 @@
-(ns tensors.examples.bilstm-tag
+(ns flare.examples.bilstm-tag
   (:gen-class)
-  (:require [tensors.node :as node]
-            [tensors.rnn :as rnn]
-            [tensors.compute :as compute]
-            [tensors.embeddings :as embeddings]
+  (:require [flare.node :as node]
+            [flare.rnn :as rnn]
+            [flare.compute :as compute]
+            [flare.embeddings :as embeddings]
             [clojure.java.io :as io]
             [clojure.tools.cli :refer [parse-opts]]
-            [tensors.neanderthal-ops :as no]
-            [tensors.model :as model]
-            [tensors.report :as report]
-            [tensors.computation-graph :as cg]
-            [tensors.train :as train]
-            [tensors.module :as module]
-            [tensors.optimize :as optimize]
-            [tensors.core :as tensors]))
+            [flare.neanderthal-ops :as no]
+            [flare.model :as model]
+            [flare.report :as report]
+            [flare.computation-graph :as cg]
+            [flare.train :as train]
+            [flare.module :as module]
+            [flare.optimize :as optimize]
+            [flare.core :as flare]))
 
 (def cli-options
   ;; An option with a required argument
@@ -101,7 +101,7 @@
                       (constantly test-data)
                       predict-fn)
                      (report/callback
-                      #(tensors/debug-info factory))]
+                      #(flare/debug-info factory))]
                     :learning-rate 1}]
     (println "Params " (map first (seq model)))
     (println "Total # params " (model/total-num-params model))

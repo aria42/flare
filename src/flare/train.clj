@@ -1,15 +1,15 @@
-(ns tensors.train
+(ns flare.train
   (:require
    [clojure.pprint :as pprint]
    [schema.core :as s]
-   [tensors.model :as model]
-   [tensors.compute :as compute]
-   [tensors.core :as tensors]
-   [tensors.report :as report]
-   [tensors.optimize :as optimize]
+   [flare.model :as model]
+   [flare.compute :as compute]
+   [flare.core :as flare]
+   [flare.report :as report]
+   [flare.optimize :as optimize]
    [plumbing.core :as p]
-   [tensors.graph :as graph]
-   [tensors.module :as module]))
+   [flare.graph :as graph]
+   [flare.module :as module]))
 
 (s/defschema TrainOpts
   {(s/optional-key :num-iters) s/Int
@@ -32,7 +32,7 @@
     (if-let [data (first batch)]
       (if-let [loss-node (get-loss-node data)]
         (let [loss-node (compute/forward-pass! factory loss-node cache)
-              _ (tensors/copy! factory (:grad loss-node) [1.0])
+              _ (flare/copy! factory (:grad loss-node) [1.0])
               loss-val (-> loss-node :value seq first)]
           ;; side-effect to update gradients
           (compute/backward-pass! factory loss-node cache)

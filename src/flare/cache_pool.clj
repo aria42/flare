@@ -1,7 +1,6 @@
-(ns tensors.cache-pool
+(ns flare.cache-pool
   (:import [java.util.concurrent LinkedBlockingQueue ConcurrentHashMap]
-           [java.util.function Function])
-  (:require [tensors.cache-pool :as cache-pool]))
+           [java.util.function Function]))
 
 (defprotocol -CachePool
   (get-obj [this k])

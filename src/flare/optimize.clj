@@ -1,8 +1,8 @@
-(ns tensors.optimize
-  (:require [tensors.core :as tensors]
+(ns flare.optimize
+  (:require [flare.core :as flare]
             [plumbing.core :as p]
-            [tensors.model :as model]
-            [tensors.compute :as compute]))
+            [flare.model :as model]
+            [flare.compute :as compute]))
 
 (defprotocol Optimizer
   (init [this params-node]
@@ -24,7 +24,7 @@
         clip-min (- (Math/abs grad-clip))
         clip-max (Math/abs grad-clip)]
     (doseq [[pname param-node] (seq model)]
-      (tensors/transform!
+      (flare/transform!
        (model/tensor-factory model)
        (p/safe-get param-node :grad)
        (fn ^double [^double x]
@@ -49,14 +49,14 @@
   ;; zero out gradients for param nodes
   (let [factory (model/tensor-factory model)]
     (doseq [[_ param-node] model]
-      (tensors/transform! factory (p/safe-get param-node :grad) 0.0))))
+      (flare/transform! factory (p/safe-get param-node :grad) 0.0))))
 
 (defrecord SGD [factory alpha]
   Optimizer
   ;; intentional no-op
   (init [this params-node] nil)
   (update-params! [this params-node state]
-    (tensors/transform! 
+    (flare/transform! 
      factory 
      (p/safe-get params-node :value) 
      (p/safe-get params-node :grad)
@@ -68,32 +68,32 @@
   (init [this params-node]
     ;; sum-of-squares
     (let [shape (p/safe-get params-node :shape)]
-      {:exp-grad-sqs (tensors/zeros factory shape)
-       :exp-delta-sqs (tensors/zeros factory shape)
-       :delta (tensors/zeros factory shape)}))
+      {:exp-grad-sqs (flare/zeros factory shape)
+       :exp-delta-sqs (flare/zeros factory shape)
+       :delta (flare/zeros factory shape)}))
   (update-params! [this params-node state]
     (let [g (p/safe-get params-node :grad)
           v (p/safe-get params-node :value)
           {:keys [exp-grad-sqs, exp-delta-sqs, delta]} state]
       ;; updaete gradient squared
       ;; E[g2_t] = gamma E[g2_{t-1}] + (1-gamma)  g2_t
-      (tensors/transform! factory exp-grad-sqs g
+      (flare/transform! factory exp-grad-sqs g
        (fn ^double [^double cur ^double gi]
          (+ (* gamma cur) (* (- 1.0 gamma) gi gi))))
       ;; copy gradient to update
-      (tensors/copy! factory delta g)
+      (flare/copy! factory delta g)
       ;; make update look like
-      (tensors/transform! factory delta exp-grad-sqs
+      (flare/transform! factory delta exp-grad-sqs
         (fn ^double [^double gi ^double G2i]
           (/ gi (Math/sqrt (+ epsilon G2i)))))
-      (tensors/transform! factory delta exp-delta-sqs
+      (flare/transform! factory delta exp-delta-sqs
         (fn ^double [^double gi ^double d2i]
           (* gi (Math/sqrt (+ epsilon d2i)))))
       ;; perform update
-      (tensors/transform! factory v delta
+      (flare/transform! factory v delta
         (fn ^double [^double cur ^double u]
           (- cur (* eta u))))
-      (tensors/transform! factory exp-delta-sqs delta
+      (flare/transform! factory exp-delta-sqs delta
          (fn ^double [^double cur ^double di]
            (+ (* gamma cur) (* (- 1.0 gamma) di di))))
       state)))
@@ -118,14 +118,14 @@
         (model/from-doubles! model xs)
         ;; clear gradients 
         (doseq [[_ n] model]
-          (tensors/transform! factory (:grad n) 0.0))
+          (flare/transform! factory (:grad n) 0.0))
         (loop [sum-loss 0.0 data data]
           (if-let [x (first data)]
             (when-let [g (build-graph x)]
               (let [n (compute/forward-pass! (compute/with-model-params model g) factory)
                     loss (first (:value n))]
                 ;; accumulate gradient
-                (assoc n :grad (tensors/copy! factory (:grad n) [1]))
+                (assoc n :grad (flare/copy! factory (:grad n) [1]))
                 (compute/backward-pass! n)
                 (recur (+ sum-loss loss) (next data))))
             [sum-loss (model/to-doubles model :grad)]))))))

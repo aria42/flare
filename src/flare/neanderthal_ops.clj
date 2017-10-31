@@ -1,17 +1,17 @@
 (set! *unchecked-math* true)
 
-(ns tensors.neanderthal-ops
+(ns flare.neanderthal-ops
   (:use [uncomplicate.neanderthal core native])
-  (:require [tensors.graph :as graph]
-            [tensors.core :as tensors]
-            [tensors.compute :as compute]
+  (:require [flare.graph :as graph]
+            [flare.core :as flare]
+            [flare.compute :as compute]
             [uncomplicate.neanderthal.core :as np]
             [uncomplicate.neanderthal.real :as real]
             [schema.core :as s]
             [plumbing.core :as p]
-            [tensors.cache-pool :as cache-pool]
+            [flare.cache-pool :as cache-pool]
             [uncomplicate.neanderthal.vect-math :as vect-math])
-  (:import [tensors.node Node]
+  (:import [flare.node Node]
            [org.apache.commons.math3.util FastMath]
            [java.util LinkedList]
            [java.util.concurrent.atomic AtomicLong]
@@ -170,7 +170,7 @@
   compute/TensorOp
   (ensure-valid?! [this input-nodes]
     (let [shape (:shape (first input-nodes))]
-      (when-not (tensors/vector-shape? shape)
+      (when-not (flare/vector-shape? shape)
         (throw (ex-info "Need vector shape" {:shape shape})))))
   (forward-node-pass! [this node]
     (let [^Node node node
@@ -486,10 +486,10 @@
 (defonce *cached-zeros (atom {}))
 
 (defn zero-fill [factory t]
-  (let [shape (tensors/shape factory t)]
+  (let [shape (flare/shape factory t)]
     (if-let [cached (get @*cached-zeros shape)]
       (copy! cached t)
-      (let [z (tensors/zeros factory shape)]
+      (let [z (flare/zeros factory shape)]
         (swap! *cached-zeros assoc shape z)
         (copy! z t)))))
 
@@ -503,7 +503,7 @@
     :else (throw (ex-info "Don't recognize fn"))))
 
 (defrecord ^:private Factory []
-  tensors/PFactory
+  flare/PTensorFactory
   (get-op [this op-key]
     ((get +tensor-ops+ op-key)))
   (transform! [this tensor get-val]
@@ -541,8 +541,8 @@
           dims (when (identical? type :od-fn)
                  (long-array (if (vctr? tensor) 1 2)))
           fixed-return (double (if (identical? type :double) 1.0 0.0))
-          shape (tensors/shape this tensor)
-          oshape (tensors/shape this other-tensor)]
+          shape (flare/shape this tensor)
+          oshape (flare/shape this other-tensor)]
      (when-not (= shape oshape)
        (throw (ex-info "Non-matching shapes"
                        {:shape shape :other-shape oshape})))
@@ -575,7 +575,7 @@
   (from [this nums]
     (if (or (vctr? nums) (matrix? nums))
       nums
-      (-from-nums nums (tensors/guess-shape nums))))
+      (-from-nums nums (flare/guess-shape nums))))
 
   (copy! [this tensor! nums]
     (cond
@@ -595,7 +595,7 @@
     (-zeros shape))
 
 
-  tensors/-InternalPFactory
+  flare/-InternalPTensorFactory
   (debug-info [this]
     {:debug
      {:perf

@@ -1,6 +1,6 @@
-(ns tensors.core-test
+(ns flare.core-test
   (:require [clojure.test :refer :all]
-            [tensors.core :refer :all]))
+            [flare.core :refer :all]))
 
 (deftest guess-shape-test
   (testing "simple guess-shape"

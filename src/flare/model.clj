@@ -1,12 +1,11 @@
-(ns tensors.model
-  (:import [java.util HashMap Map]
-           [tensors.node Node])
+(ns flare.model
   (:require [schema.core :as s]
-            [tensors.core :as tensors]
-            [tensors.cache-pool :as cache-pool]
-            [tensors.node :as node]
+            [flare.core :as flare]
+            [flare.cache-pool :as cache-pool]
+            [flare.node :as node]
             [plumbing.core :as p])
-  (:import [java.util Arrays]))
+  (:import [java.util Arrays HashMap Map]
+           [flare.node Node]))
 
 (s/defschema InitParamSpec
   "Spec for how to generate parameter entries independently
@@ -48,7 +47,7 @@
    By convention, any implementation should be seqable and return a
    sequence of [param-name, param-node] pairs for the model"
   (tensor-factory [this]
-    "return the underlying tensor factory (`PFactory`) for the model")
+    "return the underlying tensor factory (`PTensorFactory`) for the model")
   (-add-params! [this param-name shape init-spec]
     "add parameters to the model (mutably), returns a param graph node. Some
      argument defaulting happens below so this is the internal method,
@@ -97,7 +96,7 @@
   [model]
   (doseq [[_ node] (seq model)]
     (when-let [init (:init node)]
-      (tensors/transform!
+      (flare/transform!
        (tensor-factory model)
        (p/safe-get  node :value)
        (get-param-rng init)))))
@@ -106,7 +105,7 @@
   "Simple collection of parameters
    NOTE: The meta-data of the param-collection gives you access
    to the underlying data. Don't use it except for an emergency!"
-  [factory :- tensors/PFactory]
+  [factory :- flare/PTensorFactory]
   (let [m (java.util.HashMap.)]
     (with-meta
       (reify
@@ -120,14 +119,14 @@
             (let [node (node/map->Node
                         {:type :params
                          :ref-name param-name
-                         :value (tensors/zeros factory shape)
-                         :grad (tensors/zeros factory shape)
+                         :value (flare/zeros factory shape)
+                         :grad (flare/zeros factory shape)
                          :factory factory
                          :shape shape
                          :init init-spec})
                   get-param-val (get-param-rng (assoc init-spec :rand-seed (hash param-name)))]
               ;; initialize param vals from init-spec
-              (tensors/transform! factory (:value node) get-param-val)
+              (flare/transform! factory (:value node) get-param-val)
               (.put m param-name node)
               node)))
         (-add-param-metadata! [this param-name key val]
@@ -148,7 +147,7 @@
 
             (when-let [param (.get m param-name)]
               (let [param-tensor (:value param)]
-                (tensors/copy! factory param-tensor tensor-data)))))
+                (flare/copy! factory param-tensor tensor-data)))))
 
         clojure.lang.Seqable
         (seq [this]
@@ -193,6 +192,6 @@
       (if-let [[k n] (first es)]
         (let [num-vals (int (apply * (:shape n)))
               vals (Arrays/copyOfRange xs offset (+ offset num-vals))]
-          (tensors/copy! factory (:value n) (seq vals))
+          (flare/copy! factory (:value n) (seq vals))
           (recur (next es) (+ offset num-vals)))
         model))))

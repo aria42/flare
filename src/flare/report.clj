@@ -1,9 +1,8 @@
-(ns tensors.report
+(ns flare.report
   (:refer-clojure :exclude [concat])
   (:require [schema.core :as s]
-            [tensors.model :as model]
-            [plumbing.core :as p]
-            [tensors.core :as tensors]))
+            [flare.model :as model]
+            [plumbing.core :as p]))
 
 (s/defschema BatchInfo
   {:batch-loss s/Num

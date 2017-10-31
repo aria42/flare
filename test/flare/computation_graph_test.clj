@@ -1,13 +1,13 @@
-(ns tensors.computation-graph-test
+(ns flare.computation-graph-test
   (:refer-clojure :exclude [+ * concat])
   (:require [clojure.test :refer :all]
-            [tensors.computation-graph :refer :all]
-            [tensors.core :as tensors]
-            [tensors.node :as node]
-            [tensors.model :as model]
-            [tensors.neanderthal-ops :as no]))
+            [flare.computation-graph :refer :all]
+            [flare.core :as flare]
+            [flare.node :as node]
+            [flare.model :as model]
+            [flare.neanderthal-ops :as no]))
 
-(tensors/set-factory! (no/factory))
+(flare/set-factory! (no/factory))
 
 (deftest scope-test
   (testing "nested scope"
@@ -67,7 +67,7 @@
           activations (+ (* W feat-vec) b)
           label (node/input "label" [1])
           loss (cross-entropy-loss activations label)]
-      (is (tensors/scalar-shape? (:shape loss))))))
+      (is (flare/scalar-shape? (:shape loss))))))
 
 (deftest concat-op-test
   (testing "concat op"

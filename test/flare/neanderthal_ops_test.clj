@@ -1,12 +1,12 @@
-(ns tensors.neanderthal-ops-test
-  (:require [tensors.neanderthal-ops :refer :all]
+(ns flare.neanderthal-ops-test
+  (:require [flare.neanderthal-ops :refer :all]
             [uncomplicate.neanderthal.core :refer :all]
             [uncomplicate.neanderthal.native :refer :all]
             [clojure.test :refer :all]
-            [tensors.compute :as compute]
-            [tensors.computation-graph :as cg]
-            [tensors.core :as tensors]
-            [tensors.node :as node]))
+            [flare.compute :as compute]
+            [flare.computation-graph :as cg]
+            [flare.core :as flare]
+            [flare.node :as node]))
 
 (deftest sum-tensor-op-test
   (testing "C = A + B"
@@ -37,29 +37,29 @@
 
 (deftest transform!-test
   (let [f (->Factory)
-        t (tensors/zeros f [10])
-        m (tensors/zeros f [2 2])]
+        t (flare/zeros f [10])
+        m (flare/zeros f [2 2])]
     (testing "set constant value"
-      (tensors/transform! f t 2.0)
+      (flare/transform! f t 2.0)
       (is (= (repeat 10 2.0) (seq t)))
-      (tensors/transform! f m 2.0)
+      (flare/transform! f m 2.0)
       (is (= [[2. 2.] [2. 2.]] (seq m))))
     (testing "set function value"
-      (tensors/transform! f t 0.0)
-      (tensors/transform! f t (fn ^double [^longs idxs ^double x]
+      (flare/transform! f t 0.0)
+      (flare/transform! f t (fn ^double [^longs idxs ^double x]
                                 (+ x (double (aget idxs 0)))))
       (is (= (map double (range 10)) (seq t)))
-      (tensors/transform! f m 0.0)
-      (tensors/transform! f m
+      (flare/transform! f m 0.0)
+      (flare/transform! f m
          (fn ^double [^longs idxs ^double x]
            (double (+ x (aget idxs 0) (aget idxs 1)))))
       (is (= [[0.0 1.0] [1.0 2.0]] (seq m))))
     (testing "set function and other value"
-      (let [o (tensors/from f (range 10))]
-        (tensors/transform! f t 0.0)
-        (tensors/transform! f t o (fn ^double [^double cur ^double other]
+      (let [o (flare/from f (range 10))]
+        (flare/transform! f t 0.0)
+        (flare/transform! f t o (fn ^double [^double cur ^double other]
                                     (* other other)))
-        (tensors/transform! f t o (fn ^double [^double cur ^double other]
+        (flare/transform! f t o (fn ^double [^double cur ^double other]
                                     (+ cur (* other other))))
         (is (= (for [x (range 10)] (* 2.0 x x)) (seq t)))))))
 
@@ -166,7 +166,7 @@
   (let [x {:ref-name "x" :shape [3] :value (dv [1 2 3]) :grad (dv [2 2 2])}
         fx {:ref-name "fx" :shape [3] :value (dv 3) :grad (dv 3)}]
     (testing "exp(x) test"
-      (let [op (tensors/get-op (->Factory) :exp)]
+      (let [op (flare/get-op (->Factory) :exp)]
         (compute/forward-node-pass! op (assoc fx :children [x]))
         (is (:value fx) (dv (map #(Math/exp %) [1 2 3])))
         (compute/backward-node-pass! op (assoc fx :children [x]))

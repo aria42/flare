@@ -1,8 +1,8 @@
-(ns tensors.batch-bench-test
+(ns flare.batch-bench-test
   (:use [uncomplicate.neanderthal core native]
         [tensors neanderthal-ops])
-  (:require [tensors.graph :as graph]
-            [tensors.core :as tensors]
+  (:require [flare.graph :as graph]
+            [flare.core :as flare]
             [tensors.compute :as compute]
             [uncomplicate.neanderthal.core :as np]
             [uncomplicate.neanderthal.native :as native]

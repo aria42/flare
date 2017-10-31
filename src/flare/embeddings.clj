@@ -1,8 +1,8 @@
-(ns tensors.embeddings
+(ns flare.embeddings
   (:require [schema.core :as s]
-            [tensors.computation-graph :as cg]
-            [tensors.core :as tensors]
-            [tensors.node :as node]))
+            [flare.computation-graph :as cg]
+            [flare.core :as flare]
+            [flare.node :as node]))
 
 (defprotocol Embedding
   (lookup [this obj])
@@ -31,8 +31,8 @@
     (doseq [[obj nums] obj-vec-pairs]
       (when-let [dupe (.get m obj)]
         (throw (ex-info "Duplicate entry" {:dupe obj})))
-      (let [t (tensors/from factory nums)
-            s (tensors/shape factory t)]
+      (let [t (flare/from factory nums)
+            s (flare/shape factory t)]
         (when (not= s expected-shape)
           (throw (ex-info "embedding doesn't have same shape"
                           {:expected [embedding-size] :actual s})))

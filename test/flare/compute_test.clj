@@ -1,13 +1,13 @@
-(ns tensors.compute-test
-  (:require [tensors.compute :refer :all]
-            [tensors.computation-graph :as cg]
-            [tensors.core :as tensors]
-            [tensors.neanderthal-ops :as no]
-            [tensors.node :as node]
-            [tensors.model :as model]
+(ns flare.compute-test
+  (:require [flare.compute :refer :all]
+            [flare.computation-graph :as cg]
+            [flare.core :as flare]
+            [flare.neanderthal-ops :as no]
+            [flare.node :as node]
+            [flare.model :as model]
             [uncomplicate.neanderthal.core :refer :all]
             [clojure.test :refer :all]
-            [tensors.compute :as compute]))
+            [flare.compute :as compute]))
 
 (deftest compile-forward-test
   (testing "simple graph"
@@ -35,7 +35,7 @@
           label (node/input "label" [1])
           loss (cg/cross-entropy-loss activations label)]
       (let [input->vals {"f" [1 2 1] "label" [0]}
-            one-grad (tensors/from factory [1.0])
+            one-grad (flare/from factory [1.0])
             _ (compute/with-inputs! factory loss input->vals)
             loss (forward-pass! factory loss)]
         (is (not (neg? (first (seq (:value loss))))))
@@ -55,11 +55,11 @@
           X (model/add-params! model [2])
           Z (cg/+ X X)]
       ;; hack to set values for params
-      (tensors/copy! factory
+      (flare/copy! factory
          (:value (get params-map (:ref-name X)))
          [2.0 2.0])
       (let [Z (forward-pass!  factory Z)]
         (is (= [4.0 4.0] (seq (:value Z))))
-        (backward-pass! factory (assoc Z :grad (tensors/from factory [1 1])))
+        (backward-pass! factory (assoc Z :grad (flare/from factory [1 1])))
         (is (= [2.0 2.0] (seq (:grad X))))))))
 

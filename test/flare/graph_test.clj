@@ -1,5 +1,5 @@
-(ns tensors.graph-test
-  (:require [tensors.graph :refer :all]
+(ns flare.graph-test
+  (:require [flare.graph :refer :all]
             [clojure.test :refer :all]))
 
 (deftest post-order-nodes-test

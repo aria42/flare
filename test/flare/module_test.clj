@@ -1,12 +1,12 @@
-(ns tensors.module-test
+(ns flare.module-test
   (:refer-clojure :exclude [comp])
-  (:require [tensors.module :refer :all]
+  (:require [flare.module :refer :all]
             [clojure.test :refer :all]
-            [tensors.model :as model]
-            [tensors.neanderthal-ops :as no]
-            [tensors.node :as node]
-            [tensors.compute :as compute]
-            [tensors.computation-graph :as cg])
+            [flare.model :as model]
+            [flare.neanderthal-ops :as no]
+            [flare.node :as node]
+            [flare.compute :as compute]
+            [flare.computation-graph :as cg])
   (:import [org.apache.commons.math3.util FastMath]))
 
 (deftest affine-test

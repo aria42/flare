@@ -1,12 +1,12 @@
-(ns tensors.module
+(ns flare.module
   (:refer-clojure :exclude [comp])
-  (:require [tensors.node :as node]
-            [tensors.model :as model]
-            [tensors.computation-graph :as cg]
-            [tensors.compute :as compute]
-            [tensors.cache-pool :as cache-pool]
-            [tensors.core :as tensors])
-  (:import [tensors.node Node]))
+  (:require [flare.node :as node]
+            [flare.model :as model]
+            [flare.computation-graph :as cg]
+            [flare.compute :as compute]
+            [flare.cache-pool :as cache-pool]
+            [flare.core :as flare])
+  (:import [flare.node Node]))
 
 (defprotocol PModule
   "A module knows ow to construct a graph for a given input. This is
@@ -34,7 +34,7 @@
               predict-val (-> forward :value seq)]
           (when cache
             (compute/free-tensors! forward cache))
-          (if (tensors/scalar-shape? (:shape forward))
+          (if (flare/scalar-shape? (:shape forward))
             (first predict-val)
             predict-val))))))
 

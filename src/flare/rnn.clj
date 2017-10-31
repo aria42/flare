@@ -1,11 +1,11 @@
-(ns tensors.rnn
+(ns flare.rnn
   (:require [schema.core :as s]
-            [tensors.model :as model]
-            [tensors.core :as tensors]
-            [tensors.node :as node]
-            [tensors.computation-graph :as cg]
-            [tensors.module :as module])
-  (:import [tensors.node Node]))
+            [flare.model :as model]
+            [flare.core :as flare]
+            [flare.node :as node]
+            [flare.computation-graph :as cg]
+            [flare.module :as module])
+  (:import [flare.node Node]))
 
 (defprotocol RNNCell
   (cell-model [this])
@@ -22,7 +22,7 @@
         ;; W_[i, o, f, g] [x, h_{t-1}] + b_[i, o, f, g]
         activations (module/affine m (* 4 hidden-dim) [cat-input-dim])
         factory (model/tensor-factory m)
-        zero  (tensors/zeros factory [hidden-dim])
+        zero  (flare/zeros factory [hidden-dim])
         init-output (node/constant factory "h0" zero)
         init-state (node/constant factory "c0"  zero)]
     (reify RNNCell
@@ -31,8 +31,8 @@
       (input-dim [this] input-dim)
       (init-pair [this] [init-output init-state])
       (add-input! [this input last-output last-state]
-        (tensors/validate-shape! [input-dim] (:shape input))
-        (tensors/validate-shape! [hidden-dim] (:shape last-state))
+        (flare/validate-shape! [input-dim] (:shape input))
+        (flare/validate-shape! [hidden-dim] (:shape last-state))
         (let [x (cg/concat 0 input last-output)
               acts (module/graph activations x)
               ;; split (i,o,f) and state

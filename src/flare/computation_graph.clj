@@ -1,15 +1,15 @@
-(ns tensors.computation-graph
+(ns flare.computation-graph
   (:refer-clojure :exclude [+ * concat])
   (:require [schema.core :as s]
-            [tensors.core :as tensors]
-            [tensors.graph :as graph]
+            [flare.core :as flare]
+            [flare.graph :as graph]
             [clojure.string :as str]
-            [tensors.node :as node]
-            [tensors.model :as model]
-            [tensors.graph :as graph]
+            [flare.node :as node]
+            [flare.model :as model]
+            [flare.graph :as graph]
             [plumbing.core :as p])
   (:import [clojure.lang Keyword]
-           [tensors.node Node]))
+           [flare.node Node]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Schemas + Protocols
@@ -140,7 +140,7 @@
   (op-descriptor [this] "arg-max")
   (forward-shape [this nodes] [1]))
 
-(s/defn ensure-vector-tensor?! [prefix shape :- tensors/Shape]
+(s/defn ensure-vector-tensor?! [prefix shape :- flare/Shape]
   (let [n (count shape)
         dim-counts (frequencies shape)]
     (when-not (and (= n 2) (= (get dim-counts 1) (dec n)))
@@ -189,10 +189,10 @@
     (when (or (nil? activations) (nil? label) (seq other))
       (throw (ex-info "Expect (activations, labels) pair"
                       {:activations activations :label label})))
-    (when-not (tensors/scalar-shape? (:shape label))
+    (when-not (flare/scalar-shape? (:shape label))
       (throw (ex-info "Label sjhould be effectively scalar"
                       {:label-shape (:shape label)})))
-    (when-not (tensors/vector-shape? (:shape activations))
+    (when-not (flare/vector-shape? (:shape activations))
       (throw (ex-info "Activations should be vector"
                       {:activations-shape (:shape activations)}))))
   (forward-shape [this [activations label :as input-nodes]]

@@ -1,8 +1,7 @@
-(ns tensors.node
+(ns flare.node
   (:require [clojure.string :as str]
             [schema.core :as s]
-            [tensors.core :as tensors]
-            [tensors.node :as node])
+            [flare.core :as flare])
   (:import [clojure.lang Keyword]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -67,29 +66,29 @@
 (s/defn input :- Node
   "Create a Node intended to be re-used as input for a static graph.
     Initialized to zeros"
-  ([factory :- tensors/PFactory input-name :- String shape :- tensors/Shape]
+  ([factory :- flare/PTensorFactory input-name :- String shape :- flare/Shape]
    (map->Node
     {:type :input
      :shape shape
-     :value (tensors/zeros factory shape)
+     :value (flare/zeros factory shape)
      :ref-name (scoped-name input-name)}))
-  ([input-name :- String shape :- tensors/Shape]
-   (input @tensors/*factory input-name shape))
-  ([shape :- tensors/Shape]
+  ([input-name :- String shape :- flare/Shape]
+   (input @flare/*factory input-name shape))
+  ([shape :- flare/Shape]
    (input (name (gensym "input")) shape)))
 
 (s/defn constant :- Node
   "A node which is a constant in a graph, typically used in dynamic graphs as leaves.
-  The `data` is meant to be anything `tensors.core/from` would accept"
-  ([factory :- tensors/PFactory input-name :- String data]
-   (let [t (tensors/from factory data)]
+  The `data` is meant to be anything `flare.core/from` would accept"
+  ([factory :- flare/PTensorFactory input-name :- String data]
+   (let [t (flare/from factory data)]
      (map->Node
       {:type :constant
-       :shape (tensors/shape factory t)
+       :shape (flare/shape factory t)
        :value t
        :ref-name (scoped-name input-name)})))
   ([input-name :- String data]
-   (constant @tensors/*factory input-name data))
+   (constant @flare/*factory input-name data))
   ([data]
    (constant (name (gensym "input")) data)))
 

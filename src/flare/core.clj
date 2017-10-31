@@ -1,7 +1,51 @@
-(ns tensors.core
+(ns flare.core
   (:require [schema.core :as s]
-            [tensors.cache-pool :as cache-pool])
+            [flare.cache-pool :as cache-pool])
   (:import [java.util Random LinkedList]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Tensor Factory
+
+(defprotocol PTensorFactory
+  "A `PTensorFactory` knows how to make and manipulate tensors. The tensor
+   type depends on the `PTensorFactory`, but there are some conventions
+   tensors should have:
+
+      * Tensors should be seqable (might revisit this)
+      * Tensors are mutable objects (duh, performance) "
+  (from [this data]
+    "create a tensor from `data`. Should minimally accept
+     (nested) sequences of numbers, but can also effectively
+     copy an existing tensor")
+  (get-op [this op-key]
+    "returns the `TensorOp` associated with the `op-key`")
+  (zeros [this shape]
+    "create a 0.0 filled tensor of a given shape")
+  (transform!
+    [this tensor get-val]
+    [this tensor other-tensor get-val]
+    "In-place transform of a `tensor` using the `get-val` function,
+     which can be a few different things
+
+      [this tensor get-val]
+      ==============================
+       * A fixed double to fill `tensor`
+       * A `IFn$ODD` primitive function taking (dims, existing) which
+         returns new value for the position
+
+
+      [this tensor other-tensor get-val]
+      ================================
+      Assumes other-tensor shape matches tensor
+      * `IFn$DDD` takes (cur-val, other-val) and returns new value
+      * `IFn$ODDD` takes (position, cur-val, other-val) and position
+        is the long-array of the location")
+  (copy! [this dst-tensor! src-tensor-like]
+    "copy from source to destination. The src should be same set of things
+     accdepted by `PTensorFactory/from`")
+  (shape [this t]
+    "return the shape of the tennsor as integer (clojure) vector"))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Tensor Shape
@@ -39,52 +83,7 @@
      (let [data {:expected expected-shape :given given-shape :key key}]
        (throw (ex-info "Got unexpected shape" data))))))
 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Tensor Factory
-
-(defprotocol PFactory
-  "A `PFactory` knows how to make and manipulate tensors. The tensor
-   type depends on the `PFactory`, but there are some conventions
-   tensors should have:
-
-      * Tensors should be seqable (might revisit this)
-      * Tensors are mutable objects (duh, performance) "
-  (from [this data]
-    "create a tensor from `data`. Should minimally accept
-     (nested) sequences of numbers, but can also effectively
-     copy an existing tensor")
-  (get-op [this op-key]
-    "returns the `TensorOp` associated with the `op-key`")
-  (zeros [this shape]
-    "create a 0.0 filled tensor of a given shape")
-  (transform!
-    [this tensor get-val]
-    [this tensor other-tensor get-val]
-    "In-place transform of a `tensor` using the `get-val` function,
-     which can be a few different things
-
-      [this tensor get-val]
-      ==============================
-       * A fixed double to fill `tensor`
-       * A `IFn$ODD` primitive function taking (dims, existing) which
-         returns new value for the position
-
-
-      [this tensor other-tensor get-val]
-      ================================
-      Assumes other-tensor shape matches tensor
-      * `IFn$DDD` takes (cur-val, other-val) and returns new value
-      * `IFn$ODDD` takes (position, cur-val, other-val) and position
-        is the long-array of the location")
-  (copy! [this dst-tensor! src-tensor-like]
-    "copy from source to destination. The src should be same set of things
-     accdepted by `PFactory/from`")
-  (shape [this t]
-    "return the shape of the tennsor as integer (clojure) vector"))
-
-
-(defprotocol -InternalPFactory
+(defprotocol -InternalPTensorFactory
   "protocols for internal understanding of performance/correctness,
    not meant to be used except by 'experts'"
   (debug-info [this] "map of debug/perf info"))
@@ -116,7 +115,3 @@
         (if-let [^LinkedList lst (.get m shape)]
           (.size lst)
           0)))))
-
-(defn with-cache [factory num-to-cache]
-  (with-meta factory
-    (assoc (meta factory) :cache (cache factory num-to-cache))))

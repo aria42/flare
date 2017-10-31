@@ -1,20 +1,20 @@
 (set! *unchecked-math* true)
-(ns tensors.examples.logistic-regression
+(ns flare.examples.logistic-regression
   (:gen-class)
-  (:require [tensors.neanderthal-ops :as no]
-            [tensors.compute :as compute]
-            [tensors.core :as tensors]
-            [tensors.model :as model]
-            [tensors.module :as module]
-            [tensors.train :as train]
-            [tensors.computation-graph :as cg]
+  (:require [flare.neanderthal-ops :as no]
+            [flare.compute :as compute]
+            [flare.core :as flare]
+            [flare.model :as model]
+            [flare.module :as module]
+            [flare.train :as train]
+            [flare.computation-graph :as cg]
             [uncomplicate.neanderthal.native :refer :all]
             [uncomplicate.neanderthal.core :refer :all]
             [clojure.tools.cli :refer [parse-opts]]
-            [tensors.node :as node]
-            [tensors.report :as report]))
+            [flare.node :as node]
+            [flare.report :as report]))
 
-(tensors/set-factory! (no/factory))
+(flare/set-factory! (no/factory))
 
 (defn data-generator [num-classes num-feats]
   (let [r (java.util.Random. 0)

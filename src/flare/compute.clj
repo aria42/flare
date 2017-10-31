@@ -1,13 +1,13 @@
-(ns tensors.compute
-  (:require [tensors.computation-graph :as cg]
-            [tensors.core :as tensors]
-            [tensors.graph :as graph]
+(ns flare.compute
+  (:require [flare.computation-graph :as cg]
+            [flare.core :as flare]
+            [flare.graph :as graph]
             [plumbing.core :as p]
             [schema.core :as s]
             [clojure.set :as set]
-            [tensors.cache-pool :as cache-pool]
-            [tensors.model :as model])
-  (:import [tensors.node Node]
+            [flare.cache-pool :as cache-pool]
+            [flare.model :as model])
+  (:import [flare.node Node]
            [java.util LinkedList]
            [java.util.concurrent.atomic AtomicLong]))
 
@@ -55,7 +55,7 @@
   [factory ^Node result-node]
   (assert (identical? :op (.type result-node)))
   (let [op-key (-> result-node .graph-op cg/op-key)
-        tensor-op (tensors/get-op factory op-key)]
+        tensor-op (flare/get-op factory op-key)]
     (ensure-valid?! tensor-op (.children result-node))
     tensor-op))
 
@@ -79,10 +79,10 @@
     (-> node
         (assoc :value (if cache
                         (cache-pool/get-obj cache (.shape node))
-                        (tensors/zeros factory (.shape node))))
+                        (flare/zeros factory (.shape node))))
         (assoc :grad (if cache
                        (cache-pool/get-obj cache (.shape node))
-                       (tensors/zeros factory (.shape node)))))
+                       (flare/zeros factory (.shape node)))))
     node))
 
 (defn validate-input-keys [nodes ^java.util.Map input->vals]
@@ -107,7 +107,7 @@
       (when (identical? :input (.type n))
         (let [vals (p/safe-get input->vals (.ref-name n))]
           (assert (.value n))
-          (tensors/copy! factory (.value n) vals))))))
+          (flare/copy! factory (.value n) vals))))))
 
 (defn forward-pass!
   "forward-pass will topographic walk through graph writing to `:value`
@@ -183,10 +183,10 @@
       (get-obj [this shape]
         (if-let [^LinkedList lst (.get m shape)]
           (if-let [t (.poll lst)]
-            (do (tensors/transform! factory t 0.0)
+            (do (flare/transform! factory t 0.0)
                 t)
-            (tensors/zeros factory shape))
-          (tensors/zeros factory shape)))
+            (flare/zeros factory shape))
+          (flare/zeros factory shape)))
       (return-obj [this shape t]
         (if-let [^LinkedList lst (.get m shape)]
           (.offer lst t)
