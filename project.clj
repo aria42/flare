@@ -7,6 +7,10 @@
   :jvm-opts ["-mx2000m"]
   :aot :all
   :lein-release {:deploy-via :clojars}
+  :scm {:name "git"
+        :url "https://github.com/aria42/flare"}
+  :profiles {:dev {:global-vars {*warn-on-reflection* true
+                                 *unchecked-math* :warn-on-boxed}}}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [uncomplicate/neanderthal "0.17.0"]
                  [prismatic/schema "1.1.6"]
