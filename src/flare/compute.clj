@@ -147,6 +147,20 @@
                      node))))))
      (.get computed-nodes (.ref-name target)))))
 
+(defn forward-val
+  "return the tensor resulting from forward computation
+   of the passed in node. Can optionally provide a tensor factory
+   or a tensor cache
+
+   Use `forward-pass!` if you want to keep handles to the tensors of
+   internal operation values and gradients"
+  ([node]
+   (when-not @flare/*factory
+     (throw (ex-info "No global factory set, use `flare/set-factory!`")))
+   (forward-val @flare/*factory node))
+  ([factory node] (forward-val factory node nil))
+  ([factory node cache] (seq (:value (forward-pass! factory node cache)))))
+
 (defn backward-pass!
   "backward-pass through all the parameter nodes associated with
    the graph computation, will write to `:grad` key for all nodes
