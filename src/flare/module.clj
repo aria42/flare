@@ -16,19 +16,6 @@
     [this input1 input2]
     "build a graph for any input(s)"))
 
-(defn -predict-fn [score-module inputs]
-  (when-let [n (apply graph score-module inputs)]
-    (let [{:keys [factory, cache, eager?]} (flare/state)
-          forward (if eager?
-                    (cg/arg-max n)
-                    (compute/forward-pass! factory (cg/arg-max n) cache))
-          predict-val (-> forward :value seq)]
-      (when cache
-        (compute/free-tensors! forward cache))
-      (if (flare/scalar-shape? (:shape forward))
-        (first predict-val)
-        predict-val))))
-
 (defn predict-fn
   "on computed graph, also apply an `arg-max` operation and
    return the forward value of that node and converts predicted
@@ -41,7 +28,17 @@
    predictions cache and re-use empty tensors in forward pass"
   ([score-module]
    (fn [& inputs]
-     (-predict-fn score-module inputs))))
+     (when-let [n (apply graph score-module inputs)]
+       (let [{:keys [factory, cache, eager?]} (flare/state)
+             forward (if eager?
+                       (cg/arg-max n)
+                       (compute/forward-pass! factory (cg/arg-max n) cache))
+             predict-val (-> forward :value seq)]
+         (when cache
+           (compute/free-tensors! forward cache))
+         (if (flare/scalar-shape? (:shape forward))
+           (first predict-val)
+           predict-val))))))
 
 (defn from-op [op]
   (when-not (satisfies? cg/GraphOp op)
@@ -81,13 +78,3 @@
       PModule
       (graph [this x]
         (cg/+ (cg/* W x) b)))))
-
-(defn static
-  "Module with a static graph, the input is used to just input values
-   (this is similar to TensorFlow's `feed-dict` and it has the nice
-   performance proprties of static graphs.)"
-  [factory root-node]
-  (reify PModule
-    (graph [this input->vals]
-      (compute/with-inputs! factory root-node input->vals)
-      root-node)))

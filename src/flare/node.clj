@@ -2,7 +2,8 @@
   (:require [clojure.string :as str]
             [schema.core :as s]
             [flare.core :as flare])
-  (:import [clojure.lang Keyword]))
+  (:import [clojure.lang Keyword]
+           [java.util.concurrent.atomic AtomicLong]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Graph Datastructure
@@ -48,10 +49,11 @@
      (let-scope
        [left (module/affine model 10 [5])
         right (module/affine model 10 [5])]
-       (cg/+ left right))```
+       (cg/+ left right))
+  ```
 
 
-  Then the model will have `(\"left/W\",\"left/b\", \"right/W\", \"right/b\")`"
+  Then the model has `(\"left/W\",\"left/b\", \"right/W\", \"right/b\")`"
   [bindings & body]
   (let [new-bindings (->> bindings
                           (partition-all 2)
@@ -59,11 +61,6 @@
                                     [k `(node/with-scope ~(name k) ~v)])))]
     `(let ~(vec new-bindings)
        ~@body)))
-
-(defn -with-eager [node factory]
-  (assoc node
-   :eager? true
-   :factory factory))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Making Nodes
@@ -98,6 +95,6 @@
   ([data]
    (constant (name (gensym "input")) data)))
 
-(let [idx (java.util.concurrent.atomic.AtomicInteger.)]
+(let [idx (AtomicLong.)]
   (defn gen-name [^String prefix]
     (str prefix ":" (.getAndIncrement idx))))
