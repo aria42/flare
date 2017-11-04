@@ -24,13 +24,13 @@
               :value (dge 2 2)
               :grad (dge 2 2)})
           node (assoc C :children [A, B])]
-      (compute/ensure-valid?! op [A B])
-      (let [forward-node (compute/forward-node-pass! op node)]
+      (cg/ensure-valid?! op [A B])
+      (let [forward-node (cg/forward-node-pass! op node)]
         (is (= forward-node node))
         (is (= (:value C) (dge 2 2 [2 4 6 8]))))
       ;; populate gradient of output
       (copy! (dge 2 2 [1 1 1 1]) (:grad C))
-      (let [backward-node (compute/backward-node-pass! op node)]
+      (let [backward-node (cg/backward-node-pass! op node)]
         (is (= backward-node node))
         (is (= (:grad B) (dge 2 2 [1 1 1 1])))
         (is (= (:grad A) (dge 2 2 [1 1 1 1])))))))
@@ -79,13 +79,13 @@
               :value (dge 2 2)
               :grad (dge 2 2)})
           node (assoc C :children [A, B])]
-      (compute/ensure-valid?! op [A B])
-      (let [forward-node (compute/forward-node-pass! op node)]
+      (cg/ensure-valid?! op [A B])
+      (let [forward-node (cg/forward-node-pass! op node)]
         (is (= forward-node node))
         (is (= (:value C) (dge 2 2 [3 6 4 8]))))
       ;; populate gradient of output
       (copy! (dge 2 2 [1 1 1 1]) (:grad C))
-      (let [backward-node (compute/backward-node-pass! op node)]
+      (let [backward-node (cg/backward-node-pass! op node)]
         (is (= backward-node node))
         (is (= (:grad B) (dge 1 2 [3 3])))
         (is (= (:grad A) (dge 2 1 [7 7]))))))
@@ -103,13 +103,13 @@
               :value (dv 2)
               :grad (dv 2)})
           node (assoc c :children [A, b])]
-      (compute/ensure-valid?! op [A b])
-      (let [forward-node (compute/forward-node-pass! op node)]
+      (cg/ensure-valid?! op [A b])
+      (let [forward-node (cg/forward-node-pass! op node)]
         (is (= forward-node node))
         (is (= (:value c) (dv [9 12]))))
       ;; populate gradient of output
       (copy! (dv [1 1]) (:grad c))
-      (let [backward-node (compute/backward-node-pass! op node)]
+      (let [backward-node (cg/backward-node-pass! op node)]
         (is (= backward-node node))
         (is (= (:grad b) (dv [3 7 11])))
         (is (= (:grad A) (dge 2 3 [1 1 1 1 1 1])))))))
@@ -126,12 +126,12 @@
               :value (dv 2)
               :grad (dv [1 1])})
           node (assoc B :children [A])]
-      (compute/ensure-valid?! op [A])
-      (let [forward-node (compute/forward-node-pass! op node)]
+      (cg/ensure-valid?! op [A])
+      (let [forward-node (cg/forward-node-pass! op node)]
         (is (= forward-node node))
         (is (= (:value B) (dv [1 1]))))
       ;; populate gradient of output
-      (let [backward-node (compute/backward-node-pass! op node)]
+      (let [backward-node (cg/backward-node-pass! op node)]
         (is (= backward-node node))
         (is (= (:grad A) (dge 2 1[1 1])))))))
 
@@ -148,12 +148,12 @@
               :value (dge 2 1 [1 1])
               :grad (dge 2 1 [1 1])})
           node (assoc B :children [A])]
-      (compute/ensure-valid?! op [A])
-      (let [forward-node (compute/forward-node-pass! op node)]
+      (cg/ensure-valid?! op [A])
+      (let [forward-node (cg/forward-node-pass! op node)]
         (is (= forward-node node))
         (is (= (:value B) (dge 2 1 [1 1]))))
       ;; populate gradient of output
-      (let [backward-node (compute/backward-node-pass! op node)]
+      (let [backward-node (cg/backward-node-pass! op node)]
         (is (= backward-node node))
         (is (= (:grad A) (dv [1 1])))))))
 
@@ -167,28 +167,20 @@
         fx {:ref-name "fx" :shape [3] :value (dv 3) :grad (dv 3)}]
     (testing "exp(x) test"
       (let [op (flare/get-op (->Factory) :exp)]
-        (compute/forward-node-pass! op (assoc fx :children [x]))
+        (cg/forward-node-pass! op (assoc fx :children [x]))
         (is (:value fx) (dv (map #(Math/exp %) [1 2 3])))
-        (compute/backward-node-pass! op (assoc fx :children [x]))
+        (cg/backward-node-pass! op (assoc fx :children [x]))
         (is (:grad x) (dv (map #(* 2 (Math/exp %)) [1 2 3])))))))
 
 (deftest hadamard-test
-  (testing "base hadamard test"
-    (let [out (dv 3)]
-      (hadamard out (dv [1 2 3]) (dv [1 2 2]) false)
-      (is out (dv [1 4 6])))
-    (let [out (dge 2 2)
-          x (dge 2 2 [1 2 3 4])]
-      (hadamard out x x false)
-      (is (= out (dge 2 2 [1 4 9 16])))))
   (testing "hadamard op test"
     (let [op (->HadamardTensorOp)
           x {:ref-name "x" :value (dv [1 2 3]) :grad (dv 3)}
           y {:ref-name "x" :value (dv [2 2 2]) :grad (dv 3)}
           n {:ref-name "n" :value (dv 3) :children [x y] :grad (dv [3 3 3])}]
-      (compute/forward-node-pass! op n)
+      (cg/forward-node-pass! op n)
       (is (= (dv [2 4 6]) (:value n)))
-      (compute/backward-node-pass! op n)
+      (cg/backward-node-pass! op n)
       (is (= (dv [6 6 6]) (:grad x)))
       (is (= (dv [3 6 9]) (:grad y))))))
 
@@ -207,8 +199,8 @@
                  :value (dv [0.0])
                  :grad (dv [1.0])})
           node (assoc loss :children [scores label])]
-      (compute/ensure-valid?! op [scores label])
-      (let [forward-node (compute/forward-node-pass! op node)]
+      (cg/ensure-valid?! op [scores label])
+      (let [forward-node (cg/forward-node-pass! op node)]
         (is (<
              (l2-dist
               (:flare.neanderthal-ops/probs forward-node)
@@ -218,7 +210,7 @@
               target-loss (- (Math/log 0.307))]
           (is (< (Math/abs (- target-loss loss-scalar)) 0.001)))
         ;; populate gradient of output
-        (let [backward-node (compute/backward-node-pass! op forward-node)]
+        (let [backward-node (cg/backward-node-pass! op forward-node)]
           (is (<
                (l2-dist
                 (:grad scores)
@@ -232,21 +224,21 @@
           o (node/map->Node {:shape [5] :value (dv 5) :children [n1 n2]
                              :graph-op {:dim-to-cat 0}})
           op (->ConcatTensorOp)]
-      (compute/forward-node-pass! op o)
+      (cg/forward-node-pass! op o)
       (is (= (dv [1 2 3 4 5])(:value o))))
     (let [n1 (node/map->Node {:shape [1 2] :value (dge 1 2 [1 2])})
           n2 (node/map->Node {:shape [1 3] :value (dge 1 3 [3 4 5])})
           o (node/map->Node {:shape [1 5] :value (dge 1 5) :children [n1 n2]
                              :graph-op {:dim-to-cat 1}})
           op (->ConcatTensorOp)]
-      (compute/forward-node-pass! op o)
+      (cg/forward-node-pass! op o)
       (is (= (dge 1 5 (range 1 6))(:value o)))))
 
   (testing "arg-max test"
     (let [n (node/map->Node {:shape [2] :value (dv [3.0 1.0])})
           o (node/map->Node {:shape [1] :value (dv 1) :children [n]})
           op (->ArgMaxTensorOp)]
-      (= [0] (seq (:value (compute/forward-node-pass! op o))))))
+      (= [0] (seq (:value (cg/forward-node-pass! op o))))))
 
   (testing "concat backward test"
     (let [n1 (node/map->Node {:shape [2] :grad (dv 2)})
@@ -254,7 +246,7 @@
           o (node/map->Node {:shape [5] :grad (dv (range 1 6)) :children [n1 n2]
                              :graph-op {:dim-to-cat 0}})
           op (->ConcatTensorOp)]
-      (compute/backward-node-pass! op o)
+      (cg/backward-node-pass! op o)
       (is (= (dv [1 2])(:grad n1)))
       (is (= (dv [3 4 5])(:grad n2))))
     (let [n1 (node/map->Node {:shape [1 2] :grad (dge 1 2)})
@@ -262,7 +254,7 @@
           o (node/map->Node {:shape [1 5] :grad (dge 1 5 (range 1 6)) :children [n1 n2]
                              :graph-op {:dim-to-cat 1}})
           op (->ConcatTensorOp)]
-      (compute/backward-node-pass! op o)
+      (cg/backward-node-pass! op o)
       (is (= (dge 1 2 [1 2]) (:grad n1)))
       (is (= (dge 1 3 [3 4 5]) (:grad n2))))))
 
@@ -275,7 +267,7 @@
                              :grad (dv [3 4])
                              :graph-op {:dim 0 :start 2 :stop 4}})
           op (->SplitTensorOp)]
-      (compute/forward-node-pass! op o)
+      (cg/forward-node-pass! op o)
       (is (= (dv [3 4])(:value o)))
-      (compute/backward-node-pass! op o)
+      (cg/backward-node-pass! op o)
       (is (= [0. 0.  3. 4. 0.] (seq (:grad n1)))))))

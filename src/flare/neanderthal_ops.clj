@@ -1,5 +1,3 @@
-(set! *unchecked-math* true)
-
 (ns flare.neanderthal-ops
   (:use [uncomplicate.neanderthal core native])
   (:require [flare.graph :as graph]
@@ -10,9 +8,11 @@
             [schema.core :as s]
             [plumbing.core :as p]
             [flare.cache-pool :as cache-pool]
-            [uncomplicate.neanderthal.vect-math :as vect-math])
+            [uncomplicate.neanderthal.vect-math :as vect-math]
+            [flare.computation-graph :as cg])
   (:import [flare.node Node]
            [org.apache.commons.math3.util FastMath]
+           [org.apache.commons.math3.analysis.function Sigmoid]
            [java.util LinkedList]
            [java.util.concurrent.atomic AtomicLong]
            [clojure.lang IFn$DD IFn$ODD IFn$DDD IFn$ODDD]))
@@ -37,7 +37,7 @@
                     {:shape (vec shape)}))))
 
 (defrecord SumTensorOp []
-  compute/TensorOp
+  cg/TensorOp
   (ensure-valid?! [this input-nodes]
     (doseq [^Node n input-nodes] (ensure-valid-shape?! (.shape n))))
   (forward-node-pass! [this node]
@@ -62,7 +62,7 @@
     node))
 
 (defrecord MultTensorOp []
-  compute/TensorOp
+  cg/TensorOp
   (ensure-valid?! [this input-nodes]
     (doseq [^Node n input-nodes]
       (ensure-valid-shape?! (.shape n)))
@@ -148,7 +148,7 @@
 
 
 (defrecord SqueezeTensorOp []
-  compute/TensorOp
+  cg/TensorOp
   (ensure-valid?! [this input-nodes]
     (when-not (= 2 (count (.shape ^Node (first input-nodes))))
       (throw (ex-info "Need matrix shape"
@@ -167,7 +167,7 @@
     node))
 
 (defrecord StrechTensorOp []
-  compute/TensorOp
+  cg/TensorOp
   (ensure-valid?! [this input-nodes]
     (let [shape (:shape (first input-nodes))]
       (when-not (flare/vector-shape? shape)
@@ -197,7 +197,7 @@
     probs!))
 
 (defrecord CrossEntropyLossTensorOp []
-  compute/TensorOp
+  cg/TensorOp
   (ensure-valid?! [this [activations label]]
     true)
   (forward-node-pass! [this node]
@@ -234,7 +234,7 @@
                       (if (= idx gold-idx) 1.0 0.0)))))))))
     node))
 
-(defn ^:static hadamard [out! x y reset?]
+#_(defn ^:static hadamard [out! x y reset?]
   (if (vctr? x)
     (alter! out! (fn ^double [^long i ^double cur]
                    (let [val (* (real/entry x i) (real/entry y i))]
@@ -244,7 +244,7 @@
                      (if reset? val (+ cur val)))))))
 
 (defrecord ArgMaxTensorOp []
-  compute/TensorOp
+  cg/TensorOp
   (ensure-valid?! [this [X]]
     (when-not (= 1 (count (:shape X)))
       (throw (ex-info "Only handle vectors" {:X X})))
@@ -258,7 +258,7 @@
     (throw (ex-info "Not Supported"))))
 
 (defrecord HadamardTensorOp []
-  compute/TensorOp
+  cg/TensorOp
   (ensure-valid?! [this [X Y]]
     (ensure-valid-shape?! (:shape X))
     (ensure-valid-shape?! (:shape Y))
@@ -266,30 +266,34 @@
   (forward-node-pass! [this node]
     (let [output (p/safe-get node :value)
           [X Y] (map :value (:children node))]
-      (hadamard output X Y true)
+      (vect-math/mul! X Y output)
       node))
   (backward-node-pass! [this node]
     (let [dZ (p/safe-get node :grad)
           Z (p/safe-get node :value)
           [X Y] (map :value (:children node))
-          [dX dY] (map :grad (:children node))]
+          [dX dY] (map :grad (:children node))
+          tmp (when (or dX dY)
+                (zero dZ))]
       (when dX
-        (hadamard dX Y dZ false))
+        (vect-math/mul! Y dZ tmp)
+        (axpby! tmp dX))
       (when dY
-        (hadamard dY X dZ false)))
+        (vect-math/mul! X dZ tmp)
+        (axpby! tmp dY)))
     node))
 
 (defn dropout-mask [node]
   (let [t (-zeros (:shape node))
         prob (p/safe-get-in node [:graph-op :prob])]
     (alter! t (fn ^double [^double _]
-                (if (< (rand) prob)
+                (if (< (Math/random) ^double prob)
                   0.0
                   1.0)))
     t))
 
 (defrecord DropoutTensorOp []
-  compute/TensorOp
+  cg/TensorOp
   (ensure-valid?! [this inputs]
     (doseq [x inputs]
       (ensure-valid-shape?! (:shape x)))
@@ -297,38 +301,38 @@
   (forward-node-pass! [this node]
     (let [mask (dropout-mask node)
           input (first (:children node))]
-      (hadamard
-       (p/safe-get node :value)
+      (vect-math/mul!
        mask
        (p/safe-get input :value)
-       false)
+       (p/safe-get node :value))
       (assoc node ::dropout-mask mask)))
   (backward-node-pass! [this node]
     (let [mask (p/safe-get node ::dropout-mask)
           input (first (:children node))]
       (when-let [g (p/safe-get input :grad)]
-        (hadamard
-         g
-         mask
-         (p/safe-get node :grad)
-         false))
+        (let [tmp (zero g)]
+          (vect-math/mul!
+           mask
+           (p/safe-get node :grad)
+           tmp)
+          (axpby! tmp g)))
       node)))
 
 (defrecord SplitTensorOp []
-  compute/TensorOp
+  cg/TensorOp
   (ensure-valid?! [this inputs]
     (doseq [x inputs]
       (ensure-valid-shape?! (:shape x)))
     true)
   (forward-node-pass! [this node]
-    (let [{:keys [dim, start, stop]} (:graph-op node)
+    (let [{:keys [dim, ^long start, ^long stop]} (:graph-op node)
           child (-> node :children first)
           v (p/safe-get child :value)]
       (case (count (:shape child))
         1 (copy! (subvector v start (- stop start)) (p/safe-get node :value))))
     node)
   (backward-node-pass! [this node]
-    (let [{:keys [dim, start, stop]} (:graph-op node)
+    (let [{:keys [dim, ^long start, ^long stop]} (:graph-op node)
           child (-> node :children first)
           g (p/safe-get node :grad)]
       (when-let [cg (:grad child)]
@@ -338,7 +342,7 @@
              (subvector cg start (- stop start))))))))
 
 (defrecord ConcatTensorOp []
-  compute/TensorOp
+  cg/TensorOp
   (ensure-valid?! [this inputs]
     (doseq [x inputs]
       (ensure-valid-shape?! (:shape x)))
@@ -393,7 +397,7 @@
 
 (defrecord ElementwiseTransformOp
   [^IFn$DD fx ^IFn$DD dfx]
-  compute/TensorOp
+  cg/TensorOp
   (ensure-valid?! [this [X]]
     (ensure-valid-shape?! (:shape X))
     true)
@@ -408,7 +412,7 @@
 
 (defrecord VecMathTransformOp
   [vec-fx ^IFn$DD dfx]
-  compute/TensorOp
+  cg/TensorOp
   (ensure-valid?! [this [X]]
     (ensure-valid-shape?! (:shape X))
     true)
@@ -420,9 +424,9 @@
   (backward-node-pass! [this node]
     (element-wise-backward! dfx node)))
 
-(defn ^:private ^:static sigmoid
-  ^double [^double x]
-  (/ 1.0 (+ 1.0 (FastMath/exp (- x)))))
+(let [s (Sigmoid.)]
+  (defn ^:private ^:static sigmoid ^double  [^double x]
+    (.value s x)))
 
 (def ^:private +elementwise-op+
   ;; f(x) = e^x, df(x) = e^x
@@ -512,7 +516,7 @@
           dims (when (identical? type :odd-fn)
                  (long-array (if (vctr? tensor) 1 2)))
           fixed-return (double (if (identical? type :double) get-val 0.0))]
-      (if (and (identical? type :double) (zero? get-val))
+      (if (and (identical? type :double) (zero? fixed-return))
         (zero-fill this tensor)
         (alter! tensor
                 (case [type (vctr? tensor)]
@@ -555,13 +559,13 @@
                [:oddd-fn true]
                (fn tf ^double [^long i  ^double x]
                  (aset dims (int 0) i)
-                 (aset )
                  (let [other-val (real/entry other-tensor i)]
                    (.invokePrim ^IFn$ODDD get-val dims x other-val)))
                [:ddd-fn false]
-               (fn ft ^double [^long i ^long j ^double x]
-                 (let [other-val (real/entry other-tensor i j)]
-                   (.invokePrim ^IFn$DDD get-val x other-val)))
+               (let [^IFn$DDD get-val get-val]
+                 (fn ft ^double [^long i ^long j ^double x]
+                   (let [other-val (real/entry other-tensor i j)]
+                     (.invokePrim get-val x other-val))))
                [:oddd-fn false]
                (fn ff ^double [^long i ^long j ^double x]
                  (aset dims (int 0) i)
@@ -603,7 +607,7 @@
            process-perf
            (sort-by (fn [e]
                       (let [{:keys [forward, backward]} (val e)]
-                        (- (+ forward backward))))))}}))
+                        (- (+ ^double forward ^double backward))))))}}))
 
 (defn -build-perf-map []
   (p/for-map [k (keys +tensor-ops+)]
@@ -613,4 +617,4 @@
 
 (defn factory [& [num-to-cache]]
   (let [f (->Factory)]
-    (with-meta f (assoc (meta f) :debug {:perf (-build-perf-map)}))))
+    (with-meta f (assoc-in (meta f) [:debug :perf] (-build-perf-map)))))

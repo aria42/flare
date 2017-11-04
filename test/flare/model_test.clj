@@ -7,6 +7,8 @@
             [flare.neanderthal-ops :as no]
             [flare.model :as model]))
 
+(flare/init!)
+
 (deftest uniform-test
   (let [oracle (java.util.Random. 0)
         spec {:distribution :uniform :lower 0.0 :upper 1.0 :rand-seed 0}

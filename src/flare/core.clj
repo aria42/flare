@@ -1,6 +1,8 @@
 (ns flare.core
+  (:refer-clojure :exclude [set!])
   (:require [schema.core :as s]
-            [flare.cache-pool :as cache-pool])
+            [flare.cache-pool :as cache-pool]
+            [flare.core :as flare])
   (:import [java.util Random LinkedList]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -88,13 +90,7 @@
    not meant to be used except by 'experts'"
   (debug-info [this] "map of debug/perf info"))
 
-(def *factory
-  "atom for global factory to avoid passing into operations"
-  (atom nil))
-
-
-(defn set-factory! [factory]
-  (reset! *factory factory))
+(def +zero+ (Double. 0.0))
 
 (defn cache [factory num-to-cache]
   (let [m (java.util.HashMap.)]
@@ -103,7 +99,7 @@
       (get-obj [this shape]
         (if-let [^LinkedList lst (.get m shape)]
           (if-let [t (.poll lst)]
-            (do (transform! factory t 0.0)
+            (do (transform! factory t +zero+)
                 t)
             (zeros factory shape))
           (zeros factory shape)))
@@ -115,3 +111,41 @@
         (if-let [^LinkedList lst (.get m shape)]
           (.size lst)
           0)))))
+
+(s/defschema FlareState
+  {(s/optional-key :factory) PTensorFactory
+   (s/optional-key :eager?) s/Bool
+   (s/optional-key :cache) cache-pool/-CachePool})
+
+(def ^:private *state
+  "global state for flow"
+  (atom nil))
+
+(defn state []
+  (let [state @*state]
+    (when (nil? state)
+      (throw (ex-info "Didn't call `flare/set!` or `flare/init!`" {})))
+    (when (and (:eager? state) (nil? (:factory state)))
+      (throw (ex-info "Can't be eager with setting :factory"
+                      {:state state})))
+    state))
+
+(defn set!
+  [init-state]
+  (reset! *state init-state))
+
+(defn init!
+  "Defaults the state of flare with following
+     * eager? is true, so all graph ops eagerly compute forward
+     * factory is neanderthal (only good tensor impl)
+     * a cache with `num-to-cache` (defaults to 1,000)"
+  ([] (init! 1000))
+  ([num-to-cache]
+   (let [ns-symb (symbol 'flare.neanderthal-ops)
+         _ (require ns-symb)
+         ns (find-ns ns-symb)
+         factory ((ns-resolve ns 'factory))]
+     (reset! *state
+      {:eager? true
+       :factory factory
+       :cache (cache factory num-to-cache)}))))

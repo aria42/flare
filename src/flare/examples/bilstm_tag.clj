@@ -42,11 +42,15 @@
    (:emb-size opts)
    (-> opts :embed-file io/reader embeddings/read-text-embedding-pairs)))
 
-(defn lstm-sent-classifier [model word-emb lstm-size num-classes]
+(flare/set!
+ (let [f (no/factory)]
+   {:eager? true :factory f :cache (flare/cache f 1000)}))
+
+(defn lstm-sent-classifier [model word-emb ^long lstm-size num-classes]
   (node/let-scope
       ;; let-scope so the parameters get smart-nesting
-      [emb-size (embeddings/embedding-size word-emb)
-       num-dirs 2
+      [^long emb-size (embeddings/embedding-size word-emb)
+       ^long num-dirs 2
        input-size (* num-dirs emb-size)
        hidden-size (* num-dirs lstm-size)
        lstm (rnn/lstm-cell model input-size hidden-size)
@@ -75,11 +79,11 @@
 
 (defn train [{:keys [lstm-size, num-classes, train-file, test-file] :as opts}]
   (let [emb (load-embeddings opts)
+        factory (:factory (flare/state))
         train-data (take (:num-data opts) (load-data train-file))
         test-data (take (:num-data opts) (load-data test-file))
         gen-batches #(partition-all 32 train-data)
-        factory (no/factory)
-        model (model/simple-param-collection factory)
+        model (model/simple-param-collection)
         ;; classifier can use a cache to avoid
         ;; re-allocating tensors across prediction
         classifier (lstm-sent-classifier model emb lstm-size num-classes)
@@ -87,7 +91,7 @@
                     (-> classifier
                         (with-meta {:train? true})
                         (module/graph sent tag)))
-        predict-fn (module/predict-fn factory classifier)
+        predict-fn (module/predict-fn classifier)
         train-opts {:num-iters 100
                     :optimizer (optimize/->Adadelta factory 1.0 0.9 1e-6)
                     ;; report train/test accuracy each iter
@@ -111,7 +115,7 @@
   (def opts {:embed-file "data/small-glove.50d.txt"
              :lstm-size 100
              :num-classes 2
-             :num-data 100
+             :num-data 1000
              :train-file "data/sentiment-train10k.txt"
              :test-file "data/sentiment-test10k.txt"
              :emb-size 50}))

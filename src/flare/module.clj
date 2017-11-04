@@ -16,6 +16,19 @@
     [this input1 input2]
     "build a graph for any input(s)"))
 
+(defn -predict-fn [score-module inputs]
+  (when-let [n (apply graph score-module inputs)]
+    (let [{:keys [factory, cache, eager?]} (flare/state)
+          forward (if eager?
+                    (cg/arg-max n)
+                    (compute/forward-pass! factory (cg/arg-max n) cache))
+          predict-val (-> forward :value seq)]
+      (when cache
+        (compute/free-tensors! forward cache))
+      (if (flare/scalar-shape? (:shape forward))
+        (first predict-val)
+        predict-val))))
+
 (defn predict-fn
   "on computed graph, also apply an `arg-max` operation and
    return the forward value of that node and converts predicted
@@ -26,17 +39,9 @@
 
    Will create a cache for this prediction fn to ensure
    predictions cache and re-use empty tensors in forward pass"
-  [factory score-module]
-  (let [cache (compute/cache factory 100)]
-    (fn [& inputs]
-      (when-let [n (apply graph score-module inputs)]
-        (let [forward (compute/forward-pass! factory (cg/arg-max n) cache)
-              predict-val (-> forward :value seq)]
-          (when cache
-            (compute/free-tensors! forward cache))
-          (if (flare/scalar-shape? (:shape forward))
-            (first predict-val)
-            predict-val))))))
+  ([score-module]
+   (fn [& inputs]
+     (-predict-fn score-module inputs))))
 
 (defn from-op [op]
   (when-not (satisfies? cg/GraphOp op)

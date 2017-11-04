@@ -14,7 +14,7 @@
             [flare.node :as node]
             [flare.report :as report]))
 
-(flare/set-factory! (no/factory))
+(flare/set! {:factory (no/factory)})
 
 (defn data-generator [num-classes num-feats]
   (let [r (java.util.Random. 0)

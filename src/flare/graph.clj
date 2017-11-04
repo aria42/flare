@@ -1,7 +1,8 @@
 (ns flare.graph
   (:require [schema.core :as s]
             [clojure.string :as str]
-            [plumbing.core :as p]))
+            [plumbing.core :as p])
+  (:import [java.util HashMap ArrayList LinkedList HashSet]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Graph Walks
@@ -13,8 +14,8 @@
     (walk-fn node)))
 
 (defn topographic [node]
-  (let [marks (java.util.HashMap.)
-        ret (java.util.ArrayList.)
+  (let [marks (HashMap.)
+        ret (ArrayList.)
         visit (fn visit [n]
                 (let [m (get marks (:ref-name n) :none)]
                   (case m
@@ -37,9 +38,9 @@
       node)))
 
 (defn post-order-nodes [target]
-  (let [list (java.util.ArrayList.)
-        queue (java.util.LinkedList.)
-        seen? (java.util.HashSet.)
+  (let [list (ArrayList.)
+        queue (LinkedList.)
+        seen? (HashSet.)
         add-to-queue (fn [x]
                        (when-not (.contains seen? (:ref-name x))
                          (.add queue x)
@@ -54,7 +55,7 @@
           (recur))
         (reverse list)))))
 
-(defn gen-binary [depth]
+(defn gen-binary [^long depth]
   (if (zero? depth)
     {:value (name (gensym "node"))}
     {:value (name (gensym "node"))

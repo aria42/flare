@@ -27,26 +27,28 @@
 
    Each entry in batch as treated as arguments to `module/graph`
    to build an expression for example loss"
-  [factory get-loss-node batch cache]
-  (loop [batch-loss 0.0 batch batch]
-    (if-let [data (first batch)]
-      (if-let [loss-node (get-loss-node data)]
-        (let [loss-node (compute/forward-pass! factory loss-node cache)
-              _ (flare/copy! factory (:grad loss-node) [1.0])
-              loss-val (-> loss-node :value seq first)]
-          ;; side-effect to update gradients
-          (compute/backward-pass! factory loss-node cache)
-          (recur (+ batch-loss 0.0 (double loss-val)) (next batch)))
-        (recur batch-loss (next batch)))
-      batch-loss)))
+  [factory get-loss-node batch]
+  (let [{:keys [eager?, cache]} (flare/state)]
+    (loop [batch-loss 0.0 batch batch]
+      (if-let [data (first batch)]
+        (if-let [loss-node (get-loss-node data)]
+          (let [loss-node (if eager?
+                            loss-node
+                            (compute/forward-pass! factory loss-node cache))
+                _ (flare/copy! factory (:grad loss-node) [1.0])
+                loss-val (-> loss-node :value seq first)]
+            ;; side-effect to update gradients
+            (compute/backward-pass! factory loss-node cache)
+            (recur (+ batch-loss 0.0 (double loss-val)) (next batch)))
+          (recur batch-loss (next batch)))
+        batch-loss))))
 
 (defn iter! [model optimizer get-loss-node data-gen opts]
   (let [total-loss (atom 0.0)
-        factory (model/tensor-factory model)
-        cache (compute/cache factory 100)]
+        factory (model/tensor-factory model)]
     (doseq [batch (data-gen)]
       (optimize/reset-batch! optimizer model)
-      (let [batch-loss (run-batch! factory get-loss-node batch cache)]
+      (let [batch-loss (run-batch! factory get-loss-node batch)]
         (swap! total-loss + batch-loss))
       (optimize/update-model! optimizer model))
     @total-loss))

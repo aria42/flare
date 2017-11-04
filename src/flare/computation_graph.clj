@@ -7,9 +7,11 @@
             [flare.node :as node]
             [flare.model :as model]
             [flare.graph :as graph]
-            [plumbing.core :as p])
+            [plumbing.core :as p]
+            [flare.cache-pool :as cache-pool])
   (:import [clojure.lang Keyword]
-           [flare.node Node]))
+           [flare.node Node]
+           [java.util.concurrent.atomic AtomicLong]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Schemas + Protocols
@@ -26,24 +28,70 @@
     "returns the shape of the operation")
   (op-descriptor [this]
     "returns a text description of the operation, useful for generating
-     equations of the graph computations"))
+     equations of the graph computations, can include the shape
+     or other arguments"))
+
+(defprotocol TensorOp
+  "A tensor op executes a given `GraphOp` in a tensor implementation"
+  (ensure-valid?! [this input-nodes]
+    "Ensure the operation can be perfed with the tensor operation. Some
+    impls may support limited dimension or sizes")
+  (forward-node-pass! [this node]
+    "compute the forward pass of the algorithm, for each node, compute
+     `:value` tensor for passed in node, using the `:children` nodes
+     and their `:value` tensors. Returns the node in case any other
+     computations are added to the node for use in the backward pass.")
+  (backward-node-pass! [this node]
+    "compute the `:grad` gradient tensor on each child of passed in node reaching
+     down to the leaves  (which include the parameter nodes).
+     Returns the node so that downstream backward-node-pass!
+     calls can use added data."))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Adding Graph Op
 
+(defn -tensor-op
+  "valdiates that tensor op valid for a computation,
+   and returns `TensorOp`"
+  [^Node node factory]
+  (assert (identical? :op (.type node)))
+  (let [op-key (-> node .graph-op op-key)
+        tensor-op (flare/get-op factory op-key)]
+    (ensure-valid?! tensor-op (.children node))
+    tensor-op))
+
+(defn -tensor [^Node node factory cache]
+  (if cache
+    (cache-pool/get-obj cache (.shape node))
+    (flare/zeros factory (.shape node))))
+
+(defn -forward
+  ([^Node node factory cache]
+   (let [tensor-op (-tensor-op node factory)
+         ok (-> node .graph-op op-key)
+         node (assoc node
+                     :value (-tensor node factory cache)
+                     :grad (-tensor node factory cache))
+         perf-map (-> factory meta (get-in [:debug :perf]))
+         start (System/nanoTime)
+         node (forward-node-pass! tensor-op  node)
+         end (System/nanoTime)
+         sum-nanos (get-in perf-map [ok :forward])]
+     (when sum-nanos
+       (.getAndAdd ^AtomicLong sum-nanos (- end start)))
+     node)))
 
 (s/defn add-graph-op
   [op :- GraphOp  nodes]
   (op-validate! op nodes)
   ;; Bottleneck so using java constructor
-  (Node.
-   :op
-   (forward-shape op nodes)
-   (node/scoped-name (node/gen-name (name (op-key op))))
-   nil ;; value
-   nil ;; grad
-   op
-   nodes))
+  (let [shape (forward-shape op nodes)
+        node-name (node/scoped-name (node/gen-name (name (op-key op))))
+        node (Node. :op shape node-name nil nil op nodes)
+        {:keys [eager?, factory, cache]} (flare/state)]
+    (if eager?
+      (-forward node factory cache)
+      node)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Display/Summarize Graphs
@@ -55,7 +103,7 @@
     (:ref-name node)))
 
 (s/defn generate-equations :- [s/Str]
-  [target]
+  [^Node target]
   (for [n (graph/post-order-nodes target) :when (= (:type n) :op)]
     (format "%s = (%s %s) ;; shape: %s"
             (:ref-name n)
@@ -63,9 +111,9 @@
             (str/join " " (map display-name (:children n)))
             (:shape n))))
 
-(s/defn summarize-computation
+(defn summarize-computation
   "Create informative s-expression for computation"
-  ([target indent :- s/Int]
+  ([^Node target ^long indent]
    (str
     (when (> indent 0)
       (str "\n" (str/join (repeat indent "  "))))
@@ -106,7 +154,7 @@
 
 (defn vec-remove
   "remove elem in coll"
-  [coll pos]
+  [coll ^long pos]
   (vec (clojure.core/concat (subvec coll 0 pos) (subvec coll (inc pos)))))
 
 (defrecord MultGraphOp []
@@ -165,7 +213,7 @@
     (let [shape (vec (:shape (first inputs)))]
       (vec-remove shape dim-to-squeeze))))
 
-(defrecord StrechGraphOp [dim-to-insert]
+(defrecord StrechGraphOp [^long dim-to-insert]
   GraphOp
   (op-key [this] :strech)
   (op-descriptor [this] (str "strech-" dim-to-insert))
@@ -238,7 +286,7 @@
       (throw (ex-info "stop must be > start"
                       {:stop stop :start start})))
     (let [n (first inputs)
-          dim-len (nth (:shape n) dim)]
+          ^long dim-len (nth (:shape n) dim)]
       (when (or (< start 0) (> stop dim-len))
         (throw (ex-info "Out of dimension"
                         {:start start, :stop stop :dim-len dim-len})))))

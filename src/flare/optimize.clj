@@ -51,7 +51,7 @@
     (doseq [[_ param-node] model]
       (flare/transform! factory (p/safe-get param-node :grad) 0.0))))
 
-(defrecord SGD [factory alpha]
+(defrecord SGD [factory ^double alpha]
   Optimizer
   ;; intentional no-op
   (init [this params-node] nil)
@@ -127,12 +127,12 @@
                 ;; accumulate gradient
                 (assoc n :grad (flare/copy! factory (:grad n) [1]))
                 (compute/backward-pass! n)
-                (recur (+ sum-loss loss) (next data))))
+                (recur (+ sum-loss ^double loss) (next data))))
             [sum-loss (model/to-doubles model :grad)]))))))
 
 (defn rand-bump-test [diff-fn ^doubles xs]
   (let [n (alength xs)
-        rng #(- (* 2.0 (rand)) 1.0)
+        rng #(- (* 2.0 (Math/random)) 1.0)
         dir (repeatedly (alength xs) rng)
         [fx grad] (val-at diff-fn xs)
         get-bump (fn [alpha] (map (fn [x d] (+ x (* alpha d))) xs dir))

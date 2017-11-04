@@ -7,7 +7,7 @@
             [flare.model :as model]
             [flare.neanderthal-ops :as no]))
 
-(flare/set-factory! (no/factory))
+(flare/set! {:factory (no/factory)})
 
 (deftest scope-test
   (testing "nested scope"

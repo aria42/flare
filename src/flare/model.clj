@@ -5,7 +5,8 @@
             [flare.node :as node]
             [plumbing.core :as p])
   (:import [java.util Arrays HashMap Map]
-           [flare.node Node]))
+           [flare.node Node]
+           [clojure.lang IFn$ODD]))
 
 (s/defschema InitParamSpec
   "Spec for how to generate parameter entries independently
@@ -14,7 +15,7 @@
   {:distribution s/Keyword
    s/Any s/Any})
 
-(defmulti ^clojure.lang.IFn$ODD get-param-rng :distribution)
+(defmulti ^IFn$ODD get-param-rng :distribution)
 
 (defmethod get-param-rng :uniform
   [{:keys [rand-seed, lower, upper]}]
@@ -25,7 +26,7 @@
       (+ lower (* (- upper lower) (.nextDouble r))))))
 
 (defmethod get-param-rng :xavier-uniform
-  [{:keys [rand-seed, num-in, num-out]}]
+  [{:keys [rand-seed, ^long num-in, ^long num-out]}]
   (let [r (java.util.Random. (long (or rand-seed 0)))
         low (- (Math/sqrt (/ 6.0 (+ num-in num-out))))
         high (- low)]
@@ -105,54 +106,58 @@
   "Simple collection of parameters
    NOTE: The meta-data of the param-collection gives you access
    to the underlying data. Don't use it except for an emergency!"
-  [factory :- flare/PTensorFactory]
-  (let [m (java.util.HashMap.)]
-    (with-meta
-      (reify
+  ([] (simple-param-collection (:factory (flare/state))))
+  ([factory :- flare/PTensorFactory]
+   (let [m (java.util.HashMap.)]
+     (with-meta
+       (reify
 
-        PModel
-        (tensor-factory [this] factory)
-        (-add-params! [this param-name shape init-spec]
-          (let [param-name (node/scoped-name param-name)]
-            (when-let [existing (.get m param-name)]
-              (throw (ex-info "Existing param key" {:existing existing})))
-            (let [node (node/map->Node
-                        {:type :params
-                         :ref-name param-name
-                         :value (flare/zeros factory shape)
-                         :grad (flare/zeros factory shape)
-                         :factory factory
-                         :shape shape
-                         :init init-spec})
-                  get-param-val (get-param-rng (assoc init-spec :rand-seed (hash param-name)))]
-              ;; initialize param vals from init-spec
-              (flare/transform! factory (:value node) get-param-val)
-              (.put m param-name node)
-              node)))
-        (-add-param-metadata! [this param-name key val]
-          (let [n (canonical-node this param-name)
-                n (with-meta n (assoc (meta n) key val))]
-            (.put m param-name n)
-            n))
-        (canonical-node [this param-or-name]
-          (if-let [v (.get m param-or-name)]
-            v
-            (throw (ex-info "Non-existtant param" {:key param-or-name}))))
+         PModel
+         (tensor-factory [this] factory)
+         (-add-params! [this param-name shape init-spec]
+           (let [param-name (node/scoped-name param-name)]
+             (when-let [existing (.get m param-name)]
+               (throw (ex-info "Existing param key" {:existing existing})))
+             (let [node (node/-with-eager
+                         (node/map->Node
+                          {:type :params
+                           :ref-name param-name
+                           :value (flare/zeros factory shape)
+                           :grad (flare/zeros factory shape)
+                           :shape shape
+                           :init init-spec})
+                         factory)
+                   ;; to determinize initializatin
+                   init-spec (assoc init-spec :rand-seed (hash param-name))
+                   get-param-val (get-param-rng init-spec)]
+               ;; initialize param vals from init-spec
+               (flare/transform! factory (:value node) get-param-val)
+               (.put m param-name node)
+               node)))
+         (-add-param-metadata! [this param-name key val]
+           (let [n (canonical-node this param-name)
+                 n (with-meta n (assoc (meta n) key val))]
+             (.put m param-name n)
+             n))
+         (canonical-node [this param-or-name]
+           (if-let [v (.get m param-or-name)]
+             v
+             (throw (ex-info "Non-existtant param" {:key param-or-name}))))
 
-        -TestPModel
-        (fix-param! [this param-or-name tensor-data]
-          (let [param-name (if (instance? Node param-or-name)
-                             (.ref-name ^Node param-or-name)
-                             param-or-name)]
+         -TestPModel
+         (fix-param! [this param-or-name tensor-data]
+           (let [param-name (if (instance? Node param-or-name)
+                              (.ref-name ^Node param-or-name)
+                              param-or-name)]
 
-            (when-let [param (.get m param-name)]
-              (let [param-tensor (:value param)]
-                (flare/copy! factory param-tensor tensor-data)))))
+             (when-let [param (.get m param-name)]
+               (let [param-tensor (:value param)]
+                 (flare/copy! factory param-tensor tensor-data)))))
 
-        clojure.lang.Seqable
-        (seq [this]
-          (for [e m] [(key e) (val e)])))
-      {:data m})))
+         clojure.lang.Seqable
+         (seq [this]
+           (for [e m] [(key e) (val e)])))
+       {:data m}))))
 
 
 (defn ^doubles to-doubles

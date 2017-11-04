@@ -58,7 +58,12 @@
                           (mapcat (fn [[k v]]
                                     [k `(node/with-scope ~(name k) ~v)])))]
     `(let ~(vec new-bindings)
-         ~@body)))
+       ~@body)))
+
+(defn -with-eager [node factory]
+  (assoc node
+   :eager? true
+   :factory factory))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Making Nodes
@@ -73,7 +78,7 @@
      :value (flare/zeros factory shape)
      :ref-name (scoped-name input-name)}))
   ([input-name :- String shape :- flare/Shape]
-   (input @flare/*factory input-name shape))
+   (input (:factory (flare/state)) input-name shape))
   ([shape :- flare/Shape]
    (input (name (gensym "input")) shape)))
 
@@ -82,13 +87,14 @@
   The `data` is meant to be anything `flare.core/from` would accept"
   ([factory :- flare/PTensorFactory input-name :- String data]
    (let [t (flare/from factory data)]
-     (map->Node
-      {:type :constant
-       :shape (flare/shape factory t)
-       :value t
-       :ref-name (scoped-name input-name)})))
+     (-> {:type :constant
+          :shape (flare/shape factory t)
+          :value t
+          :ref-name (scoped-name input-name)}
+         map->Node
+         (-with-eager factory))))
   ([input-name :- String data]
-   (constant @flare/*factory input-name data))
+   (constant (:factory (flare/state)) input-name data))
   ([data]
    (constant (name (gensym "input")) data)))
 

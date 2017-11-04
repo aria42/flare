@@ -9,15 +9,16 @@
             [clojure.test :refer :all]
             [flare.compute :as compute]))
 
+
 (deftest compile-forward-test
+  (flare/set! {:factory (no/factory)})
   (testing "simple graph"
     (let [X (node/input "X" [2 2])
           Y (node/input "Y" [2 2])
           Z (cg/+ X Y)
-          factory (no/factory)
           input-vals {"X" [[1 2] [2 1]] "Y" [[1 2] [1 1]]}]
-      (with-inputs! factory Z input-vals)
-      (let [Z (forward-pass! factory Z)]
+      (with-inputs! Z input-vals)
+      (let [Z (forward-pass! Z)]
         (is (= [[2.0 4.0] [3.0 2.0]]
                (seq (:value Z))))
         (is (= [[0.0 0.0] [0.0 0.0]]
@@ -25,7 +26,7 @@
   (testing "lr graph"
     (let [num-classes 2
           num-feats 3
-          factory (no/factory)
+          factory (:factory (flare/state))
           m (model/simple-param-collection factory)
           W (model/add-params! m [num-classes num-feats] :name "W")
           b (model/add-params! m [num-classes] :name "b")
@@ -38,7 +39,7 @@
             one-grad (flare/from factory [1.0])
             _ (compute/with-inputs! factory loss input->vals)
             loss (forward-pass! factory loss)]
-        (is (not (neg? (first (seq (:value loss))))))
+        (is (not (neg? (double (first (seq (:value loss)))))))
         (backward-pass! factory (assoc loss :grad one-grad))
         (let [W-grad (:grad (model/canonical-node m "W"))
               [wrong-row right-row] (rows W-grad)]
