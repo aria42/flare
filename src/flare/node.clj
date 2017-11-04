@@ -65,31 +65,16 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Making Nodes
 
-(s/defn input :- Node
-  "Create a Node intended to be re-used as input for a static graph.
-    Initialized to zeros"
-  ([factory :- flare/PTensorFactory input-name :- String shape :- flare/Shape]
-   (map->Node
-    {:type :input
-     :shape shape
-     :value (flare/zeros factory shape)
-     :ref-name (scoped-name input-name)}))
-  ([input-name :- String shape :- flare/Shape]
-   (input (:factory (flare/state)) input-name shape))
-  ([shape :- flare/Shape]
-   (input (name (gensym "input")) shape)))
-
 (s/defn constant :- Node
   "A node which is a constant in a graph, typically used in dynamic graphs as leaves.
   The `data` is meant to be anything `flare.core/from` would accept"
   ([factory :- flare/PTensorFactory input-name :- String data]
    (let [t (flare/from factory data)]
-     (-> {:type :constant
-          :shape (flare/shape factory t)
-          :value t
-          :ref-name (scoped-name input-name)}
-         map->Node
-         (-with-eager factory))))
+     (map->Node 
+      {:type :constant
+       :shape (flare/shape factory t)
+       :value t
+       :ref-name (scoped-name input-name)})))
   ([input-name :- String data]
    (constant (:factory (flare/state)) input-name data))
   ([data]

@@ -98,7 +98,11 @@
            (+ (* gamma cur) (* (- 1.0 gamma) di di))))
       state)))
 
-
+(defn ada-delta
+  ([eta gamma epsilon]
+   (->Adadelta (:factory (flare/state)) eta gamma epsilon))
+  ([factory ^double eta ^double gamma ^double epsilon]
+   (->Adadelta factory eta gamma epsilon)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; For Testing Bump Tests ala

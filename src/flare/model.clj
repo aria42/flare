@@ -118,15 +118,13 @@
            (let [param-name (node/scoped-name param-name)]
              (when-let [existing (.get m param-name)]
                (throw (ex-info "Existing param key" {:existing existing})))
-             (let [node (node/-with-eager
-                         (node/map->Node
-                          {:type :params
-                           :ref-name param-name
-                           :value (flare/zeros factory shape)
-                           :grad (flare/zeros factory shape)
-                           :shape shape
-                           :init init-spec})
-                         factory)
+             (let [node (node/map->Node
+                         {:type :params
+                          :ref-name param-name
+                          :value (flare/zeros factory shape)
+                          :grad (flare/zeros factory shape)
+                          :shape shape
+                          :init init-spec})
                    ;; to determinize initializatin
                    init-spec (assoc init-spec :rand-seed (hash param-name))
                    get-param-val (get-param-rng init-spec)]
@@ -160,11 +158,11 @@
        {:data m}))))
 
 
-(defn ^doubles to-doubles
+(defn to-doubles
   "Flatten parameters into a single JVM double array. Can take
    either parameter values or current gradient, depending on `key`"
-  ([model] (to-doubles model :value))
-  ([model key]
+  (^doubles [model] (to-doubles model :value))
+  (^doubles  [model key]
    (when-not (#{:grad :value} key)
      (throw (ex-info "Key must be {:grad, :value}" {:key key})))
    (let [factory (tensor-factory model)
@@ -200,3 +198,27 @@
           (flare/copy! factory (:value n) (seq vals))
           (recur (next es) (+ offset num-vals)))
         model))))
+
+(defn from-data!
+  "Load parameters from InputStream (e.g, File).
+   Mutates underlying values, will throw if parameter-name
+   doesn't exist in model, so need to construct model same
+   as when trained."
+  [model ^java.io.InputStream is]
+  (let [dis (java.io.DataInputStream. is)
+        n (.readLong dis)
+        nums (double-array n)]
+    (dotimes [i n]
+      (aset nums i (.readDouble dis)))
+    (from-doubles! model nums)))
+
+(defn to-data!
+  "Write parameters to `OutputStream`"
+  [model ^java.io.OutputStream os]
+  (let [dos (java.io.DataOutputStream. os)
+        nums (to-doubles model)
+        n (alength nums)]
+    (.writeLong dos n)
+    (dotimes [i n]
+      (.writeDouble dos (aget nums i)))))
+

@@ -60,18 +60,20 @@
     (ensure-valid?! tensor-op (.children node))
     tensor-op))
 
-(defn -tensor [^Node node factory cache]
-  (if cache
-    (cache-pool/get-obj cache (.shape node))
-    (flare/zeros factory (.shape node))))
+(defn -tensor [^Node node key factory cache]
+  (if-let [t (get node key)]
+    t
+    (if cache
+      (cache-pool/get-obj cache (.shape node))
+      (flare/zeros factory (.shape node)))))
 
 (defn -forward
   ([^Node node factory cache]
    (let [tensor-op (-tensor-op node factory)
          ok (-> node .graph-op op-key)
          node (assoc node
-                     :value (-tensor node factory cache)
-                     :grad (-tensor node factory cache))
+                     :value (-tensor node :value factory cache)
+                     :grad (-tensor node :grad factory cache))
          perf-map (-> factory meta (get-in [:debug :perf]))
          start (System/nanoTime)
          node (forward-node-pass! tensor-op  node)

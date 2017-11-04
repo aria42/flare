@@ -78,3 +78,14 @@
       PModule
       (graph [this x]
         (cg/+ (cg/* W x) b)))))
+
+(defn static
+  "Module with a static graph, the input is used to just input values
+  (this is similar to TensorFlow's `feed-dict` and it has the nice
+  performance proprties of static graphs.)"
+  [factory root-node]
+  (reify PModule
+      (graph [this input->vals]
+        (compute/with-inputs! factory root-node input->vals)
+        (compute/forward-pass! factory root-node )
+        root-node)))

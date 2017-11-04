@@ -39,20 +39,9 @@
          (model/canonical-node model (.ref-name n))
          n)))))
 
-(defn with-inputs! 
-  ([factory node input->vals]
-   (let [nodes (graph/topographic node)]
-     (validate-input-keys nodes input->vals)
-     (doseq [^Node n nodes]
-       (when (identical? :input (.type n))
-         (let [vals (p/safe-get input->vals (.ref-name n))]
-           (assert (.value n))
-           (flare/copy! factory (.value n) vals))))))
-  ([node input->vals]
-   (with-inputs! (:factory (flare/state)) node input->vals)))
-
 (defn forward-pass!
-  "forward-pass will topographic walk through graph writing to `:value`
+  "NOTE: Don't use this
+  forward-pass will topographic walk through graph writing to `:value`
   key on all compiled nodes. You can then look up and retrieve the tensors
   associated with any node"
   ([factory ^Node target]
@@ -101,7 +90,9 @@
          (cache-pool/return-obj cache (.shape n) (.value n))
          (cache-pool/return-obj cache (.shape n) (.grad n))))))
   ([factory ^Node target]
-   (backward-pass! factory target nil)))
+   (backward-pass! factory target nil))
+  ([^Node target]
+   (backward-pass! (:factory (flare/state)) target)))
 
 (defn free-tensors!
   ([node cache]

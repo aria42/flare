@@ -13,11 +13,9 @@
 (deftest compile-forward-test
   (flare/set! {:factory (no/factory)})
   (testing "simple graph"
-    (let [X (node/input "X" [2 2])
-          Y (node/input "Y" [2 2])
-          Z (cg/+ X Y)
-          input-vals {"X" [[1 2] [2 1]] "Y" [[1 2] [1 1]]}]
-      (with-inputs! Z input-vals)
+    (let [X (node/constant "X" [[1 2] [2 1]])
+          Y (node/constant "Y" [[1 2] [1 1]])
+          Z (cg/+ X Y)]
       (let [Z (forward-pass! Z)]
         (is (= [[2.0 4.0] [3.0 2.0]]
                (seq (:value Z))))
@@ -26,21 +24,19 @@
   (testing "lr graph"
     (let [num-classes 2
           num-feats 3
-          factory (:factory (flare/state))
-          m (model/simple-param-collection factory)
+          m (model/simple-param-collection)
           W (model/add-params! m [num-classes num-feats] :name "W")
           b (model/add-params! m [num-classes] :name "b")
-          feat-vec (cg/strech (node/input "f" [num-feats]) 1)
-          activations (cg/squeeze (cg/+ (cg/* W feat-vec) (cg/strech b 1)) 1)
+          feat-vec (node/constant "f" [1 2 1])
+          activations (cg/+ (cg/* W feat-vec) b)
           ;; keep 1 as the "correct" label
-          label (node/input "label" [1])
-          loss (cg/cross-entropy-loss activations label)]
-      (let [input->vals {"f" [1 2 1] "label" [0]}
-            one-grad (flare/from factory [1.0])
-            _ (compute/with-inputs! factory loss input->vals)
-            loss (forward-pass! factory loss)]
+          label (node/constant "label" [0])
+          loss (cg/cross-entropy-loss activations label)
+          factory (:factory (flare/state))]
+      (let [one-grad (flare/from factory [1.0])
+            loss (forward-pass! loss)]
         (is (not (neg? (double (first (seq (:value loss)))))))
-        (backward-pass! factory (assoc loss :grad one-grad))
+        (backward-pass! (assoc loss :grad one-grad))
         (let [W-grad (:grad (model/canonical-node m "W"))
               [wrong-row right-row] (rows W-grad)]
           ;; the incorrect label should get neg gradient

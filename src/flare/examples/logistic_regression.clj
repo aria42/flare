@@ -14,7 +14,7 @@
             [flare.node :as node]
             [flare.report :as report]))
 
-(flare/set! {:factory (no/factory)})
+(flare/init!)
 
 (defn data-generator [num-classes num-feats]
   (let [r (java.util.Random. 0)
@@ -28,39 +28,58 @@
             class-idx (.nextInt r (int num-classes))
             activations (axpy (mv W f) b)
             label (imax activations)]
-        {"f" f "label" (dv [label])}))))
+        [f label]))))
 
-(defn logistic-regression [model num-classes num-feats]
-  (let [feat-vec (node/input "f" [num-feats])
-        label (node/input "label" [1])
-        aff (module/affine model num-classes [num-feats])
-        activations (module/graph aff feat-vec)
-        loss (cg/cross-entropy-loss activations label)]
-    [loss activations]))
+(defn logistic-regression [model ^long num-classes ^long num-feats]
+  (let
+    [feats->activations (module/affine model num-classes [num-feats])]
+    ;; A module knows how to make a graph from inputs
+    (reify module/PModule
+      ;; make class activations from feat-vec
+      (graph [this feat-vec]
+        ;; take feat-vec, make constant node, pass to affine
+        (->> feat-vec
+             (node/constant "f")
+             (module/graph feats->activations)))
+      ;; make loss given feat-vec and label
+      (graph [this feat-vec label]
+        ;; cross-entropy between activations and label 
+        (let [label-node (node/constant "label" [label])
+              activations (module/graph this feat-vec)]
+          (cg/cross-entropy-loss activations label-node))))))
 
-(defn train [{:keys [num-examples, num-iters, num-feats, num-batch] :as opts}]
+(defn train [{:keys [num-examples, num-classes, num-iters,
+                     num-feats, num-batch]
+              :as opts}]
   (println "options " opts)
-  (let [num-classes 5
-        factory (no/factory)
-        m (model/simple-param-collection factory)
-        [loss activations] (logistic-regression m num-classes num-feats)
+  (let [m (model/simple-param-collection)
+        classifier (logistic-regression m num-classes num-feats)
         get-data (data-generator num-classes num-feats)
         data (doall (take num-examples (repeatedly get-data)))
         test-data (doall (take num-examples (repeatedly get-data)))
         batch-gen #(partition num-batch data)
-        predict-fn (module/predict-fn factory (module/static factory activations))
-        loss-node-fn (fn [example]
-                       (compute/with-inputs! factory loss example)
-                       loss)
+        predict-fn (module/predict-fn classifier)
+        loss-node-fn (fn [[f label]]
+                       (module/graph classifier f label))
         train-opts {:num-iters num-iters
-                    :learning-rate 0.1
                     :iter-reporter
-                    [(report/accuracy
-                      :test-accuracy
-                      #(for [t test-data]
-                         [(dissoc t "label") (first (get t "label"))])
-                      predict-fn)]}]
-    (train/train! m loss-node-fn batch-gen train-opts)))
+                    [(report/accuracy :test
+                                      (constantly test-data)
+                                      predict-fn)]}]
+    ;; write model to bytes, read from bytes
+    ;; end-to-end test for model serialization
+    (train/train! m loss-node-fn batch-gen train-opts)
+    (let [baos (java.io.ByteArrayOutputStream.)
+          _ (model/to-data! m baos)
+          is (java.io.ByteArrayInputStream. (.toByteArray baos))
+          m (model/simple-param-collection)
+          classifier (logistic-regression m num-classes num-feats)]
+      (model/from-data! m is)
+      (println
+       (report/gen
+        (report/accuracy :test-reread
+                         (constantly test-data)
+                         predict-fn))))))
 
 (def cli-options
   ;; An option with a required argument
@@ -78,11 +97,11 @@
     :parse-fn #(Integer/parseInt %)]
    ["-h" "--help"]])
 
-(comment
-  (def opts {:num-examples 10000
-             :num-batch 32
-             :num-feats 10
-             :num-iters 10}))
+(def opts {:num-examples 10000
+           :num-batch 32
+           :num-classes 5
+           :num-feats 10
+           :num-iters 10})
 
 (defn -main [& args]
   (let [parse (parse-opts args cli-options)]

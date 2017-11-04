@@ -42,9 +42,7 @@
    (:emb-size opts)
    (-> opts :embed-file io/reader embeddings/read-text-embedding-pairs)))
 
-(flare/set!
- (let [f (no/factory)]
-   {:eager? true :factory f :cache (flare/cache f 1000)}))
+(flare/init!)
 
 (defn lstm-sent-classifier [model word-emb ^long lstm-size num-classes]
   (node/let-scope
@@ -79,7 +77,6 @@
 
 (defn train [{:keys [lstm-size, num-classes, train-file, test-file] :as opts}]
   (let [emb (load-embeddings opts)
-        factory (:factory (flare/state))
         train-data (take (:num-data opts) (load-data train-file))
         test-data (take (:num-data opts) (load-data test-file))
         gen-batches #(partition-all 32 train-data)
@@ -92,21 +89,17 @@
                         (with-meta {:train? true})
                         (module/graph sent tag)))
         predict-fn (module/predict-fn classifier)
-        train-opts {:num-iters 100
-                    :optimizer (optimize/->Adadelta factory 1.0 0.9 1e-6)
-                    ;; report train/test accuracy each iter
-                    :iter-reporter
-                    [(report/accuracy
-                      :train-accuracy
-                      (constantly train-data)
-                      predict-fn)
-                     (report/accuracy
-                      :test-accuracy
-                      (constantly test-data)
-                      predict-fn)
-                     (report/callback
-                      #(flare/debug-info factory))]
-                    :learning-rate 1}]
+        train-opts
+          {:num-iters 100
+           ;; report train/test accuracy each iter
+           :iter-reporter
+           [;; Train Accuracy
+            (report/accuracy :train (constantly train-data) predict-fn)
+            ;; Test Accuracy
+            (report/accuracy :test (constantly test-data) predict-fn)
+            ;; Report performance info on tensor-ops
+            (report/callback #(-> (flare/state) :factory flare/debug-info))]
+           :learning-rate 1}]
     (println "Params " (map first (seq model)))
     (println "Total # params " (model/total-num-params model))
     (train/train! model loss-fn gen-batches train-opts)))
