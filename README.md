@@ -1,6 +1,6 @@
 # flare
 
-A Clojure library for dynamic neural nets (e.g., PyTorch, DynNet). Mostly for learning purposes, but totally useable and pretty performant (see [Performance]("#perf") below). Current features:
+A Clojure library for dynamic neural nets (e.g., PyTorch, DynNet). Mostly for learning purposes, but totally useable and pretty performant (see Performance below). Current features:
 
 * Define dynamic neural net graphs tensor (ala PyTorch or DynNet) or use the static graph approach (Tensorflow, Caffe2) for better performance.
 * Supports basic tensor ops (sum, multiply, concat, split, etc.) as well as LSTM cells and fixed embeddings. 
@@ -50,7 +50,7 @@ Notice that the computation happens *eagerly*, you don't need to call `forward` 
           (module/graph hidden->logits hidden))))))
 ```          
 
-<h2 id="#perf">Performance</h2>
+## Performance
 
 The big suprise is that Flare is relatively performant so far, no slower than PyTorch overall and for many cases 2x-3x faster than PyTorch. The actual tensor computations both utilize Intel MPK so differences in performance mostly stem from using Clojure vs Python for graph construction. 
 
