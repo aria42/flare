@@ -67,7 +67,7 @@
       ;; build loss node for two-arguments
       (graph [this sent label]
         (when-let [logits (module/graph this sent)]
-          (let [label-node (node/constant factory "label" [label])]
+          (let [label-node (node/const factory "label" [label])]
             (cg/cross-entropy-loss logits label-node)))))))
 
 (defn load-data [path]

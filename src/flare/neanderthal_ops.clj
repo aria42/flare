@@ -5,7 +5,6 @@
             [flare.compute :as compute]
             [uncomplicate.neanderthal.core :as np]
             [uncomplicate.neanderthal.real :as real]
-            [schema.core :as s]
             [plumbing.core :as p]
             [flare.cache-pool :as cache-pool]
             [uncomplicate.neanderthal.vect-math :as vect-math]

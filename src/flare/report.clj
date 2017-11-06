@@ -1,13 +1,8 @@
 (ns flare.report
   (:refer-clojure :exclude [concat])
-  (:require [schema.core :as s]
-            [flare.model :as model]
+  (:require [flare.model :as model]
+            [clojure.spec.alpha :as s]
             [plumbing.core :as p]))
-
-(s/defschema BatchInfo
-  {:batch-loss s/Num
-   :model model/PModel
-   :batch [s/Any]})
 
 (defprotocol Reporter
   "For tracking behavior of model across examples"

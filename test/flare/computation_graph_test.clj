@@ -12,7 +12,7 @@
 (defn get-node [name shape]
   (let [factory (:factory (flare/state))
         t (flare/zeros factory shape)]
-    (node/constant factory name t)))
+    (node/const factory name t)))
 
 (deftest scope-test
   (testing "nested scope"

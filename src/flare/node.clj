@@ -1,6 +1,8 @@
 (ns flare.node
+  "Abstraction for a node in a computational graph. The most common thing
+   to use here would be the `flare.node/const` function for returning a
+   constant "
   (:require [clojure.string :as str]
-            [schema.core :as s]
             [flare.core :as flare])
   (:import [clojure.lang Keyword]
            [java.util.concurrent.atomic AtomicLong]))
@@ -65,21 +67,23 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Making Nodes
 
-(s/defn constant :- Node
-  "A node which is a constant in a graph, typically used in dynamic graphs as leaves.
-  The `data` is meant to be anything `flare.core/from` would accept"
-  ([factory :- flare/PTensorFactory input-name :- String data]
+(defn ^Node const
+  "A node which is a constant in a graph, typically used in dynamic graphs
+  as leaves. The `data` is meant to be anything `flare.core/from` would
+  accept for the tensor factory"
+  ([factory ^String input-name data]
    (let [t (flare/from factory data)]
-     (map->Node 
+     (map->Node
       {:type :constant
        :shape (flare/shape factory t)
        :value t
        :ref-name (scoped-name input-name)})))
-  ([input-name :- String data]
-   (constant (:factory (flare/state)) input-name data))
+  ([^String input-name data]
+   (const (:factory (flare/state)) input-name data))
   ([data]
-   (constant (name (gensym "input")) data)))
+   (const (name (gensym "input")) data)))
 
 (let [idx (AtomicLong.)]
-  (defn gen-name [^String prefix]
+  (defn gen-name
+    [^String prefix]
     (str prefix ":" (.getAndIncrement idx))))

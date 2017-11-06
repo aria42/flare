@@ -13,8 +13,8 @@
 (deftest compile-forward-test
   (flare/set! {:factory (no/factory)})
   (testing "simple graph"
-    (let [X (node/constant "X" [[1 2] [2 1]])
-          Y (node/constant "Y" [[1 2] [1 1]])
+    (let [X (node/const "X" [[1 2] [2 1]])
+          Y (node/const "Y" [[1 2] [1 1]])
           Z (cg/+ X Y)]
       (let [Z (forward-pass! Z)]
         (is (= [[2.0 4.0] [3.0 2.0]]
@@ -27,10 +27,10 @@
           m (model/simple-param-collection)
           W (model/add-params! m [num-classes num-feats] :name "W")
           b (model/add-params! m [num-classes] :name "b")
-          feat-vec (node/constant "f" [1 2 1])
+          feat-vec (node/const "f" [1 2 1])
           activations (cg/+ (cg/* W feat-vec) b)
           ;; keep 1 as the "correct" label
-          label (node/constant "label" [0])
+          label (node/const "label" [0])
           loss (cg/cross-entropy-loss activations label)
           factory (:factory (flare/state))]
       (let [one-grad (flare/from factory [1.0])

@@ -39,12 +39,12 @@
       (graph [this feat-vec]
         ;; take feat-vec, make constant node, pass to affine
         (->> feat-vec
-             (node/constant "f")
+             (node/const "f")
              (module/graph feats->activations)))
       ;; make loss given feat-vec and label
       (graph [this feat-vec label]
         ;; cross-entropy between activations and label 
-        (let [label-node (node/constant "label" [label])
+        (let [label-node (node/const "label" [label])
               activations (module/graph this feat-vec)]
           (cg/cross-entropy-loss activations label-node))))))
 
@@ -62,7 +62,7 @@
         loss-node-fn (fn [[f label]]
                        (module/graph classifier f label))
         train-opts {:num-iters num-iters
-                    :iter-reporter
+                    :iter-reporters
                     [(report/accuracy :test
                                       (constantly test-data)
                                       predict-fn)]}]

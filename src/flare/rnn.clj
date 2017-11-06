@@ -1,32 +1,34 @@
 (ns flare.rnn
-  (:require [schema.core :as s]
-            [flare.model :as model]
+  (:require [flare.model :as model]
             [flare.core :as flare]
             [flare.node :as node]
             [flare.computation-graph :as cg]
             [flare.module :as module])
   (:import [flare.node Node]))
 
-(defprotocol RNNCell
+(defprotocol RNNCell 
   (cell-model [this])
   (output-dim [this])
   (input-dim [this])
   (init-pair [this])
   (add-input! [this input last-output last-state]))
 
-(s/defn lstm-cell
-  [m :- model/PModel input-dim :- s/Int hidden-dim :- s/Int]
+(defn lstm-cell
+  "Standard LSTM cell 
+    https://en.wikipedia.org/wiki/Long_short-term_memory
+  without any peepholes or other adaptations."
+  [model input-dim hidden-dim]
   (let [cat-input-dim (+ input-dim hidden-dim)
         ;; stack (input, output, forget, gate) params
         ;; to have a single large affien operation
         ;; W_[i, o, f, g] [x, h_{t-1}] + b_[i, o, f, g]
-        activations (module/affine m (* 4 hidden-dim) [cat-input-dim])
-        factory (model/tensor-factory m)
+        activations (module/affine model (* 4 hidden-dim) [cat-input-dim])
+        factory (model/tensor-factory model)
         zero  (flare/zeros factory [hidden-dim])
-        init-output (node/constant factory "h0" zero)
-        init-state (node/constant factory "c0"  zero)]
+        init-output (node/const factory "h0" zero)
+        init-state (node/const factory "c0"  zero)]
     (reify RNNCell
-      (cell-model [this] m)
+      (cell-model [this] model)
       (output-dim [this] hidden-dim)
       (input-dim [this] input-dim)
       (init-pair [this] [init-output init-state])
@@ -49,9 +51,13 @@
           [output state])))))
 
 
-(s/defn build-seq
+(defn build-seq
+  "return `[outputs states]` pair where the `outputs` and `states`
+  correspond to the output of the `RNNCell` for param `cell` on `inputs`
+  and `states` represents the sequence of hidden states of the cell
+  on each input."
   ([cell inputs] (build-seq cell inputs false))
-  ([cell :- RNNCell inputs :- [Node] bidrectional? :- s/Bool]
+  ([cell inputs bidrectional?]
    (let [factory (-> cell cell-model model/tensor-factory)
          out-dim (output-dim cell)
          [init-output init-state] (init-pair cell)

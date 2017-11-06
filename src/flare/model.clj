@@ -1,19 +1,12 @@
 (ns flare.model
-  (:require [schema.core :as s]
-            [flare.core :as flare]
+  (:require [flare.core :as flare]
             [flare.cache-pool :as cache-pool]
             [flare.node :as node]
-            [plumbing.core :as p])
+            [plumbing.core :as p]
+            [clojure.spec.alpha :as s])
   (:import [java.util Arrays HashMap Map]
            [flare.node Node]
            [clojure.lang IFn$ODD]))
-
-(s/defschema InitParamSpec
-  "Spec for how to generate parameter entries independently
-  implement `get-param-rng` multi-method for `:distribution`
-  for a new distirbution"
-  {:distribution s/Keyword
-   s/Any s/Any})
 
 (defmulti ^IFn$ODD get-param-rng :distribution)
 
@@ -68,6 +61,8 @@
   "only for testing with models"
   (fix-param! [this param-name value]))
 
+(s/def ::init-spec (s/keys :req-un [::distribution]))
+
 (defn add-params!
   "Add parameters of givne `shape` to model. Accepts some options
      * `:name` String name for parameter for inspection later
@@ -76,8 +71,8 @@
   [model shape & {:keys [name, init]}]
   (let [name (or name (clojure.core/name (gensym "param")))
         init (or init {:distribution :uniform})]
-    (s/validate s/Str name)
-    (s/validate InitParamSpec init)
+    (s/conform string? name)
+    (s/assert ::init-spec init)
     (-add-params! model name shape init)))
 
 (defn with-metadata!
@@ -102,12 +97,12 @@
        (p/safe-get  node :value)
        (get-param-rng init)))))
 
-(s/defn simple-param-collection :- PModel
+(defn simple-param-collection
   "Simple collection of parameters
    NOTE: The meta-data of the param-collection gives you access
    to the underlying data. Don't use it except for an emergency!"
   ([] (simple-param-collection (:factory (flare/state))))
-  ([factory :- flare/PTensorFactory]
+  ([factory]
    (let [m (java.util.HashMap.)]
      (with-meta
        (reify

@@ -3,7 +3,6 @@
             [flare.core :as flare]
             [flare.graph :as graph]
             [plumbing.core :as p]
-            [schema.core :as s]
             [clojure.set :as set]
             [flare.cache-pool :as cache-pool]
             [flare.model :as model])

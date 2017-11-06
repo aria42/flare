@@ -1,6 +1,5 @@
 (ns flare.graph
-  (:require [schema.core :as s]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [plumbing.core :as p])
   (:import [java.util HashMap ArrayList LinkedList HashSet]))
 

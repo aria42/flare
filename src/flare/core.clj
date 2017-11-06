@@ -1,9 +1,8 @@
 (ns flare.core
   (:refer-clojure :exclude [set!])
-  (:require [schema.core :as s]
-            [flare.cache-pool :as cache-pool]
-            [flare.core :as flare])
-  (:import [java.util Random LinkedList]))
+  (:require [clojure.spec.alpha :as s]
+            [flare.cache-pool :as cache-pool])
+  (:import [java.util LinkedList]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Tensor Factory
@@ -52,8 +51,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Tensor Shape
 
-(s/defschema Shape
-  [s/Int])
+(s/def ::shape (s/coll-of int? :gen-max 4))
 
 (defn guess-shape [nums]
   (cond
@@ -65,11 +63,6 @@
         (throw (RuntimeException. (str "Non-uniform shape: " nums))))
       (concat [(count nums)] f))
     :else nil))
-
-(s/defn effective-dimension [shape :- Shape]
-  (let [n (count shape)
-        num-squeeze-dims (count (filter #(= % 1) shape))]
-    (- n num-squeeze-dims)))
 
 (defn vector-shape? [shape]
   (= (count shape) 1))
@@ -90,16 +83,15 @@
    not meant to be used except by 'experts'"
   (debug-info [this] "map of debug/perf info"))
 
-(def +zero+ (Double. 0.0))
-
 (defn cache [factory num-to-cache]
-  (let [m (java.util.HashMap.)]
+  (let [m (java.util.HashMap.)
+        zero (Double. 0.0)]
     (reify
-      cache-pool/-CachePool
+      cache-pool/CachePool
       (get-obj [this shape]
         (if-let [^LinkedList lst (.get m shape)]
           (if-let [t (.poll lst)]
-            (do (transform! factory t +zero+)
+            (do (transform! factory t zero)
                 t)
             (zeros factory shape))
           (zeros factory shape)))
@@ -112,10 +104,12 @@
           (.size lst)
           0)))))
 
-(s/defschema FlareState
-  {(s/optional-key :factory) PTensorFactory
-   (s/optional-key :eager?) s/Bool
-   (s/optional-key :cache) cache-pool/-CachePool})
+(s/def ::state
+  (s/keys :req-un [::factory, ::eager?, ::cache]))
+
+(s/def ::factory (partial satisfies? PTensorFactory))
+(s/def ::eager? #{true false})
+(s/def ::cache (partial satisfies? cache-pool/CachePool))
 
 (def ^:private *state
   "global state for flow"

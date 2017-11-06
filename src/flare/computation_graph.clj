@@ -1,7 +1,15 @@
 (ns flare.computation-graph
+  "Abstractions for constructing computation graphs from other nodes. The public
+   methods for operations are at bottom of this ns. The key protocols are 
+   as follows:
+
+   * `GraphOp` a computational graph operation that knows nothing about tensor
+     implementation, but can validate if inputs nodes are valid and predict
+     output shape
+   * `TensorOp` an implementation of a specific graph operation which performs
+     forward/backwad operation."
   (:refer-clojure :exclude [+ * concat])
-  (:require [schema.core :as s]
-            [flare.core :as flare]
+  (:require [flare.core :as flare]
             [flare.graph :as graph]
             [clojure.string :as str]
             [flare.node :as node]
@@ -14,7 +22,7 @@
            [java.util.concurrent.atomic AtomicLong]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;  Schemas + Protocols
+;;;  Protocols
 
 (defprotocol GraphOp
   "Graph operation only needs to be aware of shape of output,
@@ -83,8 +91,13 @@
        (.getAndAdd ^AtomicLong sum-nanos (- end start)))
      node)))
 
-(s/defn add-graph-op
-  [op :- GraphOp  nodes]
+(defn add-graph-op
+  "create a new node using a `GraphOp` and a sequence of nodes. If
+   in `eager?` mode, will execute the tensor operation as well and
+   result will be in `:tensor` field on returned node
+
+   The `nodes` inputs will be on the `:children` field of returned `Node`"
+  [op nodes]
   (op-validate! op nodes)
   ;; Bottleneck so using java constructor
   (let [shape (forward-shape op nodes)
@@ -98,13 +111,15 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Display/Summarize Graphs
 
-(s/defn ^:private display-name [node]
+(defn ^:private display-name [node]
   (if (identical? (:type node) :input)
     (format "input(%s, %s)" (:ref-name node) (:shape node))
     ;; else
     (:ref-name node)))
 
-(s/defn generate-equations :- [s/Str]
+(defn generate-equations
+  "generate semi-readable equations for computations in DAG
+   represented by `target`"
   [^Node target]
   (for [n (graph/post-order-nodes target) :when (= (:type n) :op)]
     (format "%s = (%s %s) ;; shape: %s"
@@ -190,7 +205,7 @@
   (op-descriptor [this] "arg-max")
   (forward-shape [this nodes] [1]))
 
-(s/defn ensure-vector-tensor?! [prefix shape :- flare/Shape]
+(defn ensure-vector-tensor?! [prefix shape]
   (let [n (count shape)
         dim-counts (frequencies shape)]
     (when-not (and (= n 2) (= (get dim-counts 1) (dec n)))

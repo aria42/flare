@@ -1,6 +1,5 @@
 (ns flare.embeddings
-  (:require [schema.core :as s]
-            [flare.computation-graph :as cg]
+  (:require [flare.computation-graph :as cg]
             [flare.core :as flare]
             [flare.node :as node]))
 
@@ -13,7 +12,7 @@
   (for [word sent
         :let [e (lookup emb word)]
         :when e]
-    (node/constant factory (node/gen-name "word") e)))
+    (node/const factory (node/gen-name "word") e)))
 
 (deftype FixedEmbedding [^java.util.Map m ^long emb-size]
   Embedding

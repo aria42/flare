@@ -1,7 +1,7 @@
 (ns flare.train
   (:require
    [clojure.pprint :as pprint]
-   [schema.core :as s]
+   [clojure.spec.alpha :as s]
    [flare.model :as model]
    [flare.compute :as compute]
    [flare.core :as flare]
@@ -11,11 +11,14 @@
    [flare.graph :as graph]
    [flare.module :as module]))
 
-(s/defschema TrainOpts
-  {(s/optional-key :num-iters) s/Int
-   (s/optional-key :optimizer) optimize/Optimizer
-   (s/optional-key :learning-rate) s/Num
-   (s/optional-key :iter-reporter) [report/Reporter]})
+(s/def ::train-opts
+  (s/keys :opt-un
+          [::num-iters, ::optimizer, ::learning-rate, ::iter-reporters]))
+
+(s/def ::num-iters int?)
+(s/def ::optimizer (partial satisfies? optimize/Optimizer))
+(s/def ::learning-rate number?)
+(s/def ::iter-reporters (s/coll-of (partial satisfies? report/Reporter)))
 
 (def +default-train-opts+
   {:num-iters 100
@@ -53,25 +56,31 @@
       (optimize/update-model! optimizer model))
     @total-loss))
 
-(s/defn train!
-  "`data-gen` should be called to yield a lazy sequence over batches. Each batch
-   is a sequence of {input-name clj-tensor} maps (see schema above)"
-  ([model :- model/PModel
-    get-loss-node 
-    data-batch-fn
-    opts :- TrainOpts]
+(defn train!
+  "Trains a model using the following parameters:
+
+  * `model` a `flare.model/PModel` instance
+  * `get-loss-node` a function which takes each data input
+    and returns a node representing the loss in the input
+  * `data-batch-fn` assumed that calling this function yields
+    a lazy sequence of data batches, looping over each batch
+    and calls `get-loss-node`
+  * `train-opts`, see spec above"
+  ([model get-loss-node data-batch-fn train-opts]
+   (s/assert ::train-opts train-opts)
    (let [factory (model/tensor-factory model)
-         optimizer (:optimizer opts (optimize/->Adadelta factory 1.0 0.9 1e-6))
-         opts (merge +default-train-opts+ opts)]
+         opts (merge +default-train-opts+ train-opts)
+         optimizer (:optimizer train-opts
+                               (optimize/->Adadelta factory 1.0 0.9 1e-6))]
      (println "Optimizing with" (type optimizer))
      (optimize/init-model! optimizer model)
-     (dotimes [iter (:num-iters opts)]
-       (doseq [reporter (:iter-reporter opts)]
+     (dotimes [iter (:num-iters train-opts)]
+       (doseq [reporter (:iter-reporter train-opts)]
          (report/clear! reporter))
        (printf "Iteration %d\n" iter)
        (let [time (System/currentTimeMillis)
-             loss (iter! model optimizer get-loss-node data-batch-fn opts)]
-         (doseq [reporter (:iter-reporter opts)]
+             loss (iter! model optimizer get-loss-node data-batch-fn train-opts)]
+         (doseq [reporter (:iter-reporter train-opts)]
            (when-let [r (report/gen reporter)]
              (pprint/pprint r)))
          (let [delta-ms (- (System/currentTimeMillis) time)]
