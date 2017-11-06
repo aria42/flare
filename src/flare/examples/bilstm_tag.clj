@@ -22,7 +22,7 @@
    ["-test" "--test-file PATH" "path to test"
     :default "data/sentiment-test10k.txt"]
    ["-e" "--embed-file PATH" "path to data"
-    :default "data/glove.6B.300d.txt"]
+    :default "data/small-glove.300d.txt"]
    ["-c" "--num-classes PATH" "path to data"
     :default 2
     :parse-fn #(Integer/parseInt ^String %)]
