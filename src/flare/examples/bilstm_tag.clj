@@ -92,7 +92,7 @@
         train-opts
           {:num-iters 100
            ;; report train/test accuracy each iter
-           :iter-reporter
+           :iter-reporters
            [;; Train Accuracy
             (report/accuracy :train (constantly train-data) predict-fn)
             ;; Test Accuracy

@@ -74,12 +74,12 @@
      (println "Optimizing with" (type optimizer))
      (optimize/init-model! optimizer model)
      (dotimes [iter (:num-iters train-opts)]
-       (doseq [reporter (:iter-reporter train-opts)]
+       (doseq [reporter (:iter-reporters train-opts)]
          (report/clear! reporter))
        (printf "Iteration %d\n" iter)
        (let [time (System/currentTimeMillis)
              loss (iter! model optimizer get-loss-node data-batch-fn train-opts)]
-         (doseq [reporter (:iter-reporter train-opts)]
+         (doseq [reporter (:iter-reporters train-opts)]
            (when-let [r (report/gen reporter)]
              (pprint/pprint r)))
          (let [delta-ms (- (System/currentTimeMillis) time)]

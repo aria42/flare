@@ -9,7 +9,7 @@ A Clojure library for dynamic neural nets (e.g., PyTorch, DynNet). Mostly for le
 
 ## Examples
 
-See some examples in the `src/flare/examples` directory for usage examples. Single best entry is probably the LSTM example. But here are some simple ones:
+See some examples in the [`src/flare/examples`](https://github.com/aria42/flare/tree/master/src/flare/examples) directory for usage examples. Single best entry is probably the LSTM example. But here are some simple ones:
 
 ```clojure
 (ns example
