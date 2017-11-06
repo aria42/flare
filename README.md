@@ -26,7 +26,7 @@ See some examples in the `src/flare/examples` directory for usage examples. Sing
 ;; returns [5.0 7.0] tensor 
 ```
 
-Notice that the computation happens *eagerly*, you don't need to call `forward` on any node, the operation happens as soon great the graph node. While the above example is slightly verbose compared to PyTorch, for longer pieces of code you get more expressiveness. Here's an example of building a simple bidirectional LSTM sentiment classifier for a given sentence. It uses the concept of a *module* which is a protocol for building graphs given an input. Typically, you can make modules that close over new parameters and other modules in a module:
+Notice that the computation happens *eagerly*, you don't need to call `forward` on any node, the operation happens as soon great the graph node. The numerical computations use a pluggable backend, but these can use native hardwarde. While the above example is slightly verbose compared to PyTorch, for longer pieces of code you get more expressiveness. Here's an example of building a simple bidirectional LSTM sentiment classifier for a given sentence. It uses the concept of a *module* which is a protocol for building graphs given an input. Typically, you can make modules that close over new parameters and other modules in a module:
 
 ```clojure
 (defn lstm-sent-classifier [model word-emb lstm-size num-classes]
@@ -50,7 +50,7 @@ Notice that the computation happens *eagerly*, you don't need to call `forward` 
           (module/graph hidden->logits hidden))))))
 ```          
 
-## Performance
+<h2 id="#perf">Performance</h2>
 
 The big suprise is that Flare is relatively performant so far, no slower than PyTorch overall and for many cases 2x-3x faster than PyTorch. The actual tensor computations both utilize Intel MPK so differences in performance mostly stem from using Clojure vs Python for graph construction. 
 
