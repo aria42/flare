@@ -15,7 +15,6 @@
             [flare.node :as node]
             [flare.model :as model]
             [flare.graph :as graph]
-            [plumbing.core :as p]
             [flare.cache-pool :as cache-pool])
   (:import [clojure.lang Keyword]
            [flare.node Node]

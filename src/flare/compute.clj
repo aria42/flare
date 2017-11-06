@@ -2,7 +2,6 @@
   (:require [flare.computation-graph :as cg]
             [flare.core :as flare]
             [flare.graph :as graph]
-            [plumbing.core :as p]
             [clojure.set :as set]
             [flare.cache-pool :as cache-pool]
             [flare.model :as model])
@@ -67,7 +66,7 @@
                      node))))))
      (.get computed-nodes (.ref-name target))))
   ([node]
-   (forward-pass! (p/safe-get (flare/state) :factory) node)))
+   (forward-pass! (:factory (flare/state)) node)))
 
 (defn backward-pass!
   "backward-pass through all the parameter nodes associated with

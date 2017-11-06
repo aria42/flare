@@ -7,7 +7,6 @@
    [flare.core :as flare]
    [flare.report :as report]
    [flare.optimize :as optimize]
-   [plumbing.core :as p]
    [flare.graph :as graph]
    [flare.module :as module]))
 

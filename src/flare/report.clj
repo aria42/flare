@@ -1,8 +1,7 @@
 (ns flare.report
   (:refer-clojure :exclude [concat])
   (:require [flare.model :as model]
-            [clojure.spec.alpha :as s]
-            [plumbing.core :as p]))
+            [clojure.spec.alpha :as s]))
 
 (defprotocol Reporter
   "For tracking behavior of model across examples"
@@ -49,8 +48,8 @@
     (reify
       Reporter
       (update! [this info]
-        (swap! sum + (p/safe-get info :batch-loss))
-        (swap! n + (count (p/safe-get info :batch))))
+        (swap! sum + (:batch-loss info))
+        (swap! n + (count (:batch info))))
       (gen [this]
         {:avg-loss {:avg (/ @sum @n) :n @n}})
       (clear! [this]
@@ -64,9 +63,9 @@
     (reify
       Reporter
       (update! [this info]
-        (let [factory (model/tensor-factory (p/safe-get info :model))
+        (let [factory (model/tensor-factory (:model info))
               grads (mapcat (fn [[_ x]] (flatten (seq (:grad x))))
-                            (p/safe-get info :model))
+                            (:model info))
               l2-norm (Math/sqrt (reduce (fn [res x] (+ res (* x x))) 0.0 grads))
               max-l1-norm (apply max (map (fn [x] (Math/abs (double x))) grads))]
           (swap! sum-l2-norm + l2-norm)

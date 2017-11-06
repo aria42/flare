@@ -1,6 +1,5 @@
 (ns flare.optimize
   (:require [flare.core :as flare]
-            [plumbing.core :as p]
             [flare.model :as model]
             [flare.compute :as compute]))
 
@@ -26,14 +25,14 @@
     (doseq [[pname param-node] (seq model)]
       (flare/transform!
        (model/tensor-factory model)
-       (p/safe-get param-node :grad)
+       (:grad param-node)
        (fn ^double [^double x]
          (clip (* normalizer x) clip-min clip-max))))))
 
 (defn update-model! [optimizer model]
   (doseq [[param-name param-node] (seq model)]
     ;; perform update
-    (let [state (p/safe-get (meta param-node) ::state)
+    (let [state (::state (meta param-node))
           new-state (update-params! optimizer param-node state)]
       ;; update model with opt meta-data
       (model/with-metadata! model param-name ::state new-state))))
@@ -49,7 +48,7 @@
   ;; zero out gradients for param nodes
   (let [factory (model/tensor-factory model)]
     (doseq [[_ param-node] model]
-      (flare/transform! factory (p/safe-get param-node :grad) 0.0))))
+      (flare/transform! factory (:grad param-node) 0.0))))
 
 (defrecord SGD [factory ^double alpha]
   Optimizer
@@ -58,8 +57,8 @@
   (update-params! [this params-node state]
     (flare/transform! 
      factory 
-     (p/safe-get params-node :value) 
-     (p/safe-get params-node :grad)
+     (:value params-node)
+     (:grad params-node)
      (fn ^double [^double cur ^double grad]
        (- cur (* alpha grad))))))
 
@@ -67,13 +66,13 @@
   Optimizer
   (init [this params-node]
     ;; sum-of-squares
-    (let [shape (p/safe-get params-node :shape)]
+    (let [shape (:shape params-node)]
       {:exp-grad-sqs (flare/zeros factory shape)
        :exp-delta-sqs (flare/zeros factory shape)
        :delta (flare/zeros factory shape)}))
   (update-params! [this params-node state]
-    (let [g (p/safe-get params-node :grad)
-          v (p/safe-get params-node :value)
+    (let [g (:grad params-node)
+          v (:value params-node)
           {:keys [exp-grad-sqs, exp-delta-sqs, delta]} state]
       ;; updaete gradient squared
       ;; E[g2_t] = gamma E[g2_{t-1}] + (1-gamma)  g2_t

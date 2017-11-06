@@ -2,7 +2,6 @@
   (:require [flare.core :as flare]
             [flare.cache-pool :as cache-pool]
             [flare.node :as node]
-            [plumbing.core :as p]
             [clojure.spec.alpha :as s])
   (:import [java.util Arrays HashMap Map]
            [flare.node Node]
@@ -55,7 +54,9 @@
       the \"true\" value/gradient for for the parameters)."))
 
 (defn total-num-params [model]
-  (p/sum (fn [[_ p]] (apply * (:shape p))) model))
+  (->> model
+       (map (fn [[_ p]] (apply * (:shape p))))
+       (reduce +)))
 
 (defprotocol -TestPModel
   "only for testing with models"
@@ -94,7 +95,7 @@
     (when-let [init (:init node)]
       (flare/transform!
        (tensor-factory model)
-       (p/safe-get  node :value)
+       (:value node)
        (get-param-rng init)))))
 
 (defn simple-param-collection

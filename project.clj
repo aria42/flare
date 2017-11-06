@@ -14,5 +14,4 @@
                    :dependencies [[criterium "0.4.4"]]}}
   :dependencies [[org.clojure/clojure "1.9.0-beta4"]
                  [uncomplicate/neanderthal "0.17.0"]
-                 [prismatic/plumbing "0.5.4"]
                  [org.clojure/tools.cli "0.3.5"]])

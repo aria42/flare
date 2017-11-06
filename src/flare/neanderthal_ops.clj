@@ -5,7 +5,6 @@
             [flare.compute :as compute]
             [uncomplicate.neanderthal.core :as np]
             [uncomplicate.neanderthal.real :as real]
-            [plumbing.core :as p]
             [flare.cache-pool :as cache-pool]
             [uncomplicate.neanderthal.vect-math :as vect-math]
             [flare.computation-graph :as cg])
@@ -107,11 +106,11 @@
     ;; and the left-hand-side is the same value
     ;; so we can do a Matrix * Matrix operation
     ;; instead of a Matrix * Vector
-    (let [[a b] (p/safe-get node :children)
+    (let [[a b] (:children node)
           [nrows ncols] (:shape b)]
       ;; b is either vector or (row) vector
       (when (or (nil? ncols) (= ncols 1))
-        [::mult (p/safe-get a :ref-name) (:shape b)])))
+        [::mult (:ref-name a) (:shape b)])))
   (batch-forward-node-pass! [this sig nodes]
     (let [[_ m-ref v-shape] sig
           M (-> nodes first :children first)
@@ -127,17 +126,17 @@
       (loop [j 0 nodes nodes]
         (when-let [node (first nodes)]
           (let [b (-> node :children second)]
-            (transfer! (p/safe-get b :value)
+            (transfer! (:value b)
                        (submatrix new-input 0 j num-rows 1))
             (recur (inc j) (next nodes)))))
       ;; perfrom mm, copy columns to outputs
       (let [result (if cached (second cached)
                        (-mk-matrix (-> M :shape first) (count nodes)))]
         (scal! 0.0 result)
-        (mm! 1.0 (p/safe-get M :value) new-input 1.0 result)
+        (mm! 1.0 (:value M) new-input 1.0 result)
         (loop [nodes nodes cols (cols result)]
           (when-let [n (first nodes)]
-            (transfer! (first cols) (p/safe-get n :value))
+            (transfer! (first cols) (:value n))
             (recur (next nodes) (next cols))))
         (if cached
           nodes
@@ -216,7 +215,7 @@
   (backward-node-pass! [this node]
     (let [^Node node node
           [^Node activations-node ^Node label-node] (.children node)
-          probs (p/safe-get node ::probs)
+          probs (::probs node)
           loss-grad-val (-> node .grad (real/entry 0))]
       ;; l = (i == label) log(pi)
       (when-let [g (.grad label-node)]
@@ -249,7 +248,7 @@
       (throw (ex-info "Only handle vectors" {:X X})))
     true)
   (forward-node-pass! [this node]
-    (let [output (p/safe-get node :value)
+    (let [output (:value node)
           X (-> node :children first :value)]
       (real/entry! output 0 (imax X))
       node))
@@ -263,13 +262,13 @@
     (ensure-valid-shape?! (:shape Y))
     true)
   (forward-node-pass! [this node]
-    (let [output (p/safe-get node :value)
+    (let [output (:value node)
           [X Y] (map :value (:children node))]
       (vect-math/mul! X Y output)
       node))
   (backward-node-pass! [this node]
-    (let [dZ (p/safe-get node :grad)
-          Z (p/safe-get node :value)
+    (let [dZ (:grad node)
+          Z (:value node)
           [X Y] (map :value (:children node))
           [dX dY] (map :grad (:children node))
           tmp (when (or dX dY)
@@ -284,7 +283,7 @@
 
 (defn dropout-mask [node]
   (let [t (-zeros (:shape node))
-        prob (p/safe-get-in node [:graph-op :prob])]
+        prob (get-in node [:graph-op :prob])]
     (alter! t (fn ^double [^double _]
                 (if (< (Math/random) ^double prob)
                   0.0
@@ -302,17 +301,17 @@
           input (first (:children node))]
       (vect-math/mul!
        mask
-       (p/safe-get input :value)
-       (p/safe-get node :value))
+       (:value input)
+       (:value node))
       (assoc node ::dropout-mask mask)))
   (backward-node-pass! [this node]
-    (let [mask (p/safe-get node ::dropout-mask)
+    (let [mask (::dropout-mask node)
           input (first (:children node))]
-      (when-let [g (p/safe-get input :grad)]
+      (when-let [g (:grad input)]
         (let [tmp (zero g)]
           (vect-math/mul!
            mask
-           (p/safe-get node :grad)
+           (:grad node)
            tmp)
           (axpby! tmp g)))
       node)))
@@ -326,14 +325,14 @@
   (forward-node-pass! [this node]
     (let [{:keys [dim, ^long start, ^long stop]} (:graph-op node)
           child (-> node :children first)
-          v (p/safe-get child :value)]
+          v (:value child)]
       (case (count (:shape child))
-        1 (copy! (subvector v start (- stop start)) (p/safe-get node :value))))
+        1 (copy! (subvector v start (- stop start)) (:value node))))
     node)
   (backward-node-pass! [this node]
     (let [{:keys [dim, ^long start, ^long stop]} (:graph-op node)
           child (-> node :children first)
-          g (p/safe-get node :grad)]
+          g (:grad node)]
       (when-let [cg (:grad child)]
         (case (count (:shape child))
           1 (transfer!
@@ -347,7 +346,7 @@
       (ensure-valid-shape?! (:shape x)))
     true)
   (forward-node-pass! [this node]
-    (let [output (p/safe-get node :value)
+    (let [output (:value node)
           inputs (:children node)
           dim-to-cat (:dim-to-cat (:graph-op node))]
       (loop [inputs inputs offset 0]
@@ -363,7 +362,7 @@
             (recur (next inputs) (+ offset len))))))
     node)
   (backward-node-pass! [this node]
-    (let [output (p/safe-get node :grad)
+    (let [output (:grad node)
           inputs (:children node)
           dim-to-cat (get-in node [:graph-op :dim-to-cat])]
       (loop [inputs inputs offset 0]
@@ -381,9 +380,9 @@
       node)))
 
 (defn element-wise-backward! [^IFn$DD dfx node]
-  (let [dO (p/safe-get node :grad)]
+  (let [dO (:grad node)]
     (when-let [dX (-> node :children first :grad)]
-      (let [X (p/safe-get node :value)]
+      (let [X (:value node)]
         (if (vctr? dX)
           (alter! dX (fn ^double [^long i ^double cur]
                        (+ cur
@@ -401,7 +400,7 @@
     (ensure-valid-shape?! (:shape X))
     true)
   (forward-node-pass! [this node]
-    (let [output (p/safe-get node :value)
+    (let [output (:value node)
           X (-> node :children first :value)]
       (alter! output (fn ^double [^long i ^double _]
                        (.invokePrim fx (real/entry X i))))
@@ -416,7 +415,7 @@
     (ensure-valid-shape?! (:shape X))
     true)
   (forward-node-pass! [this node]
-    (let [output (p/safe-get node :value)
+    (let [output (:value node)
           X (-> node :children first :value)]
       (vec-fx X output)
       node))
@@ -446,18 +445,22 @@
               (- 1.0 (* t t))))]})
 
 (defn process-perf [perf-map]
-  (let [total-ns (p/sum (fn [e]
-                          (let [{:keys [forward, backward]} (val e)]
-                            (+ (.get ^AtomicLong forward)
-                               (.get ^AtomicLong backward))))
-                        perf-map)
+  (let [total-ns (->> perf-map
+                      (map (fn [e]
+                         (let [{:keys [forward, backward]} (val e)]
+                           (+ (.get ^AtomicLong forward)
+                              (.get ^AtomicLong backward)))))
+                      (reduce +))
         to-pct (fn [^AtomicLong l]
                  (/ (.get l) (double total-ns)))]
-    (p/for-map [[k v] perf-map]
-               k
-               (-> v
+    (into {}
+          (for [[k v] perf-map]
+            [k (-> v
                    (update-in [:forward] to-pct)
-                   (update-in [:backward] to-pct)))))
+                   (update-in [:backward] to-pct))]))))
+
+(defn map-vals [f m]
+  (into {} (for [e m] [(key e) (f (val e))])))
 
 (def ^:private +tensor-ops+
   (merge
@@ -471,10 +474,10 @@
     :dropout ->DropoutTensorOp
     :cross-entropy-loss ->CrossEntropyLossTensorOp
     :arg-max ->ArgMaxTensorOp}
-   (p/map-vals
+   (map-vals
     (fn [[fx dfx]] #(->VecMathTransformOp fx dfx))
     +vec-math-op+)
-   (p/map-vals
+   (map-vals
     (fn [[fx dfx]] #(->ElementwiseTransformOp fx dfx))
     +elementwise-op+)))
 
@@ -609,10 +612,10 @@
                         (- (+ ^double forward ^double backward))))))}}))
 
 (defn -build-perf-map []
-  (p/for-map [k (keys +tensor-ops+)]
-             k
-             {:forward (AtomicLong. 0)
-              :backward (AtomicLong. 0)}))
+  (into {}
+        (for [k (keys +tensor-ops+)]
+          [k {:forward (AtomicLong. 0)
+              :backward (AtomicLong. 0)}])))
 
 (defn factory [& [num-to-cache]]
   (let [f (->Factory)]
