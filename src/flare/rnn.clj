@@ -17,15 +17,15 @@
   "Standard LSTM cell 
     https://en.wikipedia.org/wiki/Long_short-term_memory
   without any peepholes or other adaptations."
-  [model input-dim hidden-dim]
-  (let [cat-input-dim (+ input-dim hidden-dim)
-        ;; stack (input, output, forget, gate) params
-        ;; to have a single large affien operation
-        ;; W_[i, o, f, g] [x, h_{t-1}] + b_[i, o, f, g]
-        activations (module/affine model (* 4 hidden-dim) [cat-input-dim])
-        factory (model/tensor-factory model)
-        zero  (flare/zeros factory [hidden-dim])
-        init-output (node/const factory "h0" zero)
+  [model ^long input-dim ^long hidden-dim]
+  (node/let-scope
+      [;; stack (input, output, forget, gate) params
+       ;; there is x_t -> h_t and h_{t-1} -> h_t transforms
+       input->hidden (module/affine model (* 4 hidden-dim) [input-dim])
+       prev->hidden (module/affine model (* 4 hidden-dim) [hidden-dim])
+       factory (model/tensor-factory model)
+       zero  (flare/zeros factory [hidden-dim])
+       init-output (node/const factory "h0" zero)
         init-state (node/const factory "c0"  zero)]
     (reify RNNCell
       (cell-model [this] model)
@@ -35,8 +35,9 @@
       (add-input! [this input last-output last-state]
         (flare/validate-shape! [input-dim] (:shape input))
         (flare/validate-shape! [hidden-dim] (:shape last-state))
-        (let [x (cg/concat 0 input last-output)
-              acts (module/graph activations x)
+        (let [i->h (module/graph input->hidden input)
+              p->h (module/graph prev->hidden last-output)
+              acts (cg/+ i->h p->h)
               ;; split (i,o,f) and state
               [iof, state] (cg/split acts 0 (* 3 hidden-dim))
               ;; split iof into (input, forget, output)
