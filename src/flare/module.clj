@@ -66,14 +66,14 @@
   [model num-out in-shape]
   (let [[first-dim & rest] in-shape
         out-shape (vec (cons num-out rest))
+        sigma (/ 1.0 (Math/sqrt (double num-out)))
+        init {:distribution :uniform :lower (- sigma) :upper sigma}
         W (model/add-params! model [num-out first-dim]
                              :name "W"
-                             :init {:distribution :xavier-uniform
-                                    :num-in first-dim
-                                    :num-out num-out})
+                             :init init)
         b (model/add-params! model out-shape
                              :name "b"
-                             :init {:distribution :normal})]
+                             :init init)]
     (reify
       PModule
       (graph [this x]

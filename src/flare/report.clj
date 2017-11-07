@@ -26,7 +26,10 @@
       (let [[^long num-correct ^long total]
             (->> (get-data)
                  (map (fn [[x label]]
-                        (= (long label) (long (predict-fn x)))))
+                        [(predict-fn x) label]))
+                 (filter first)
+                 (map (fn [[prediction label]]
+                        (= (long label) (long prediction))))
                  (reduce (fn [[^long num-correct ^long total] correct?]
                            [(if correct? (inc num-correct) num-correct)
                             (inc total)])

@@ -283,11 +283,11 @@
 
 (defn dropout-mask [node]
   (let [t (-zeros (:shape node))
-        prob (get-in node [:graph-op :prob])]
+        ^double prob (get-in node [:graph-op :prob])]
     (alter! t (fn ^double [^double _]
-                (if (< (Math/random) ^double prob)
+                (if (< (Math/random) prob)
                   0.0
-                  1.0)))
+                  (/ 1.0 (- 1.0 prob)))))
     t))
 
 (defrecord DropoutTensorOp []
