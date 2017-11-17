@@ -229,6 +229,16 @@
     (let [shape (vec (:shape (first inputs)))]
       (vec-remove shape dim-to-squeeze))))
 
+(defrecord SumElemsGraphOp []
+  GraphOp
+  (op-key [this] :sum-elems)
+  (op-descriptor [this] "sum-elems")
+  (op-validate! [this nodes]
+    (when-not (= 1 (count nodes))
+      (throw (ex-info "SumElems only takes single input"
+                      {:num-args (count nodes)}))))
+  (forward-shape [this inputs] [1]))
+
 (defrecord StrechGraphOp [^long dim-to-insert]
   GraphOp
   (op-key [this] :strech)
@@ -390,3 +400,6 @@
     (map (fn [[start stop]]
            (add-graph-op (->SplitOp dim start stop) [node]))
          (butlast (partition-all 2 1 splits)))))
+
+(defn sum [node]
+  (add-graph-op (SumGraphOp.) [node]))

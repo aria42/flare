@@ -144,6 +144,23 @@
            [(assoc (first nodes) :batched-cache [new-input result])]
            (rest nodes)))))))
 
+(defrecord SumElemsTensorOp []
+  cg/TensorOp
+  (ensure-valid?! [this input-nodes]
+    (doseq [^Node n input-nodes]
+      (ensure-valid-shape?! (.shape n))))
+  (forward-node-pass! [this node]
+    (let [input (-> node :children first :value)
+          s (double (sum input))]
+      (if (vctr? input)
+        (real/entry! (:value node) 0 s)
+        (real/entry! (:value node) 0 0 s)))
+    node)
+  (backward-node-pass! [this node]
+    (let [in-grad (-> node :grad first double)
+          grad (-> node :children first :grad)]
+      (alter! grad (fn ^double [^double x] (+ x in-grad))))))
+
 
 (defrecord SqueezeTensorOp []
   cg/TensorOp
