@@ -402,4 +402,4 @@
          (butlast (partition-all 2 1 splits)))))
 
 (defn sum [node]
-  (add-graph-op (SumGraphOp.) [node]))
+  (add-graph-op (SumElemsGraphOp.) [node]))

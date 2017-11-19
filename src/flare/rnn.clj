@@ -21,12 +21,20 @@
   (node/let-scope
       [;; stack (input, output, forget, gate) params
        ;; there is x_t -> h_t and h_{t-1} -> h_t transforms
-       input->hidden (module/affine model (* 4 hidden-dim) [input-dim])
-       prev->hidden (module/affine model (* 4 hidden-dim) [hidden-dim])
+       ;; input->hidden (module/affine model (* 4 hidden-dim) [input-dim])
+       input->output (module/affine model hidden-dim [input-dim])
+       input->forget (module/affine model hidden-dim [input-dim])
+       input->input (module/affine model hidden-dim [input-dim])
+       input->state  (module/affine model hidden-dim [input-dim])
+       prev->output (module/affine model hidden-dim [hidden-dim])
+       prev->forget (module/affine model hidden-dim [hidden-dim])
+       prev->input (module/affine model hidden-dim [hidden-dim])
+       prev->state  (module/affine model hidden-dim [hidden-dim])
+       ;;prev->hidden (module/affine model (* 4 hidden-dim) [hidden-dim])
        factory (model/tensor-factory model)
        zero  (flare/zeros factory [hidden-dim])
        init-output (node/const factory "h0" zero)
-        init-state (node/const factory "c0"  zero)]
+       init-state (node/const factory "c0"  zero)]
     (reify RNNCell
       (cell-model [this] model)
       (output-dim [this] hidden-dim)
@@ -35,20 +43,22 @@
       (add-input! [this input last-output last-state]
         (flare/validate-shape! [input-dim] (:shape input))
         (flare/validate-shape! [hidden-dim] (:shape last-state))
-        (let [i->h (module/graph input->hidden input)
-              p->h (module/graph prev->hidden last-output)
-              acts (cg/+ i->h p->h)
-              ;; split (i,o,f) and state
-              [iof, state] (cg/split acts 0 (* 3 hidden-dim))
-              ;; split iof into (input, forget, output)
-              [input-probs forget-probs output-probs]
-                (cg/split (cg/sigmoid iof) 0 hidden-dim (* 2 hidden-dim))
-              state (cg/tanh state)
-              ;; combine hadamard of forget past, keep present
-              state (cg/+
-                     (cg/hadamard forget-probs last-state)
-                     (cg/hadamard input-probs state))
-              output (cg/hadamard output-probs (cg/tanh state))]
+        (let [gate-acts (cg/+ (module/graph prev->state last-output)
+                              (module/graph input->state input))
+              keep-acts (cg/+ (module/graph prev->input last-output)
+                              (module/graph input->input input))
+              forget-acts (cg/+ (module/graph prev->forget last-output)
+                                (module/graph input->forget input))
+              output-acts (cg/+
+                           (module/graph input->output input)
+                           (module/graph prev->output last-output))
+              state gate-acts
+              state 
+              (cg/+
+               (cg/hadamard (cg/sigmoid forget-acts) last-state)
+               (cg/hadamard (cg/sigmoid keep-acts) state))
+              output-acts (module/graph input->output input)
+              output (cg/hadamard (cg/tanh state) (cg/sigmoid output-acts))]
           [output state])))))
 
 

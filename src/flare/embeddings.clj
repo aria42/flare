@@ -12,7 +12,7 @@
   (for [word sent
         :let [e (lookup emb word)]
         :when e]
-    (node/const factory (node/gen-name "word") e)))
+    (node/const factory (node/gen-name (str "word-" word)) e)))
 
 (deftype FixedEmbedding [^java.util.Map m ^long emb-size]
   Embedding
@@ -42,4 +42,4 @@
   (for [^String line (line-seq rdr)
         :let [fields (.split line " ")]]
     [(aget fields 0)
-     (map #(Double/parseDouble ^String %) (rest fields))]))
+     (take 5 (map #(Double/parseDouble ^String %) (rest fields)))]))

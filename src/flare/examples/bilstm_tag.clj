@@ -48,7 +48,7 @@
   (node/let-scope
       ;; let-scope so the parameters get smart-nesting
       [^long emb-size (embeddings/embedding-size word-emb)
-       ^long num-dirs 2
+       ^long num-dirs 1
        input-size (* num-dirs emb-size)
        hidden-size (* num-dirs lstm-size)
        lstm (rnn/lstm-cell model input-size hidden-size)
@@ -61,8 +61,9 @@
         (when-let [inputs (seq (embeddings/sent-nodes factory word-emb sent))]
           (let [[outputs _] (rnn/build-seq lstm inputs (= num-dirs 2))
                 train? (:train? (meta this))
-                hidden (last outputs)
-                hidden (if train? (cg/dropout 0.5 hidden) hidden)]
+                hidden (second outputs)
+                ;;hidden (if train? (cg/dropout 0.5 hidden) hidden)
+                ]
             (module/graph hidden->logits hidden))))
       ;; build loss node for two-arguments
       (graph [this sent label]
@@ -111,7 +112,19 @@
              :num-data 1000
              :train-file "data/sentiment-train10k.txt"
              :test-file "data/sentiment-test10k.txt"
-             :emb-size 50}))
+             :emb-size 5})
+
+  (do
+      (def model (model/simple-param-collection))
+      (def classifier (lstm-sent-classifier model emb 25 2))
+      (def loss-fn (fn [[sent tag]]
+                     (-> classifier
+                         (with-meta {:train? true})
+                         (module/graph sent tag))))
+      #_(def predict-fn (module/predict-fn classifier))
+      (def df (optimize/loss-fn model loss-fn train-data))
+      (optimize/rand-bump-test df (model/to-doubles model)))
+  )
 
 (defn -main [& args]
   (let [parse (parse-opts args cli-options)]

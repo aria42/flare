@@ -76,6 +76,7 @@
    (let [nodes (reverse (graph/post-order-nodes target))
          perf-map (-> factory meta (get-in [:debug :perf]))]
      (doseq [^Node n nodes :when (identical? :op (.type n))]
+       (println (format "Updating %s %s" (.ref-name n) (mapv :ref-name (:children n))))
        (let [start (System/nanoTime)
              tensor-op (cg/-tensor-op n factory)
              node (cg/backward-node-pass! tensor-op  n)

@@ -71,10 +71,12 @@
         W (model/add-params! model [num-out first-dim]
                              :name "W"
                              :init init)
-        b (model/add-params! model out-shape
-                             :name "b"
-                             :init init)]
+        ;; b (model/add-params! model out-shape
+        ;;                      :name "b"
+        ;;                      :init init)
+        ]
     (reify
       PModule
       (graph [this x]
-        (cg/+ (cg/* W x) b)))))
+        (cg/* W x)
+        #_(cg/+ (cg/* W x) #_b)))))

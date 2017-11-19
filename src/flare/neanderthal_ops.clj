@@ -399,7 +399,7 @@
 (defn element-wise-backward! [^IFn$DD dfx node]
   (let [dO (:grad node)]
     (when-let [dX (-> node :children first :grad)]
-      (let [X (:value node)]
+      (let [X (-> node :children first :value)]
         (if (vctr? dX)
           (alter! dX (fn ^double [^long i ^double cur]
                        (+ cur
@@ -484,6 +484,7 @@
    {:+ ->SumTensorOp
     :* ->MultTensorOp
     :squeeze ->SqueezeTensorOp
+    :sum-elems ->SumElemsTensorOp
     :strech ->StrechTensorOp
     :hadamard ->HadamardTensorOp
     :concat ->ConcatTensorOp

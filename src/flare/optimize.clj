@@ -125,13 +125,35 @@
         (loop [sum-loss 0.0 data data]
           (if-let [x (first data)]
             (when-let [g (build-graph x)]
-              (let [n (compute/forward-pass! (compute/with-model-params model g) factory)
+              (let [n g #_(compute/forward-pass! (compute/with-model-params model g) factory)
                     loss (first (:value n))]
                 ;; accumulate gradient
                 (assoc n :grad (flare/copy! factory (:grad n) [1]))
                 (compute/backward-pass! n)
                 (recur (+ sum-loss ^double loss) (next data))))
             [sum-loss (model/to-doubles model :grad)]))))))
+
+(defn dim-bump-test [diff-fn ^doubles xs ^double eps]
+  (let [[fx grad] (val-at diff-fn xs)]
+    (dotimes [i (alength xs)]
+      (let [xplus (aclone xs)
+            _ (aset xplus i (+ (aget xs i) eps))
+            [^double plus-fx plus-grad] (val-at diff-fn xplus)
+            xminus (aclone xs)
+            _ (aset xminus i (- (aget xs i) eps))
+            [^double minus-fx minus-grad] (val-at diff-fn xminus)
+            approx (/ (- plus-fx minus-fx) (* 2.0 eps))
+            expected (aget ^doubles grad i)
+            delta (Math/abs (- approx expected))]
+        (when (> delta eps)
+          (throw (ex-info "bad bump"
+                          {:idx i
+                           :grad grad
+                           :plus-x (seq xplus)
+                           :minus-x (seq xminus)
+                           :expected expected
+                           :approx approx})))
+        (println (format "%d -> %.5f, %.5f" i expected delta))))))
 
 (defn rand-bump-test [diff-fn ^doubles xs]
   (let [n (alength xs)
