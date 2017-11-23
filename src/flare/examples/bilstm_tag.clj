@@ -119,6 +119,7 @@
     (train (:options parse))))
 
 (comment
+  ;; Hack to test LSTM end-to-end gradient
   (do
     (def emb (load-embeddings opts))
     (def model (model/simple-param-collection))
