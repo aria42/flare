@@ -117,3 +117,15 @@
   (let [parse (parse-opts args cli-options)]
     (println (:options parse))
     (train (:options parse))))
+
+(comment
+  (do
+    (def emb (load-embeddings opts))
+    (def model (model/simple-param-collection))
+   (def classifier (lstm-sent-classifier model emb 10 2))
+   (def loss-fn (fn [[sent tag]]
+                  (-> classifier
+                      (with-meta {:train? true})
+                      (module/graph sent tag))))
+   (def df (optimize/loss-fn model loss-fn train-data))
+   (optimize/rand-bump-test df (model/to-doubles model))))

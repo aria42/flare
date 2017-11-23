@@ -73,7 +73,7 @@
    the graph computation, will write to `:grad` key for all nodes
    that have gradients (basically non-inputs) in graph"
   ([factory ^Node target cache]
-   (let [nodes (reverse (graph/post-order-nodes target))
+   (let [nodes (reverse (graph/topographic target))
          perf-map (-> factory meta (get-in [:debug :perf]))]
      (doseq [^Node n nodes :when (identical? :op (.type n))]
        (let [start (System/nanoTime)

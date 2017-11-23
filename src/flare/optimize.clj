@@ -125,7 +125,9 @@
         (loop [sum-loss 0.0 data data]
           (if-let [x (first data)]
             (when-let [g (build-graph x)]
-              (let [n (compute/forward-pass! (compute/with-model-params model g) factory)
+              (let [n (if (:eager? (flare/state))
+                        g
+                        (compute/forward-pass! (compute/with-model-params model g) factory))
                     loss (first (:value n))]
                 ;; accumulate gradient
                 (assoc n :grad (flare/copy! factory (:grad n) [1]))
