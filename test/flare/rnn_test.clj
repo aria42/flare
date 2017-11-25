@@ -13,7 +13,7 @@
 (deftest lstm-cell-test
   (let [m (model/simple-param-collection)
         cell (flare.rnn/lstm-cell m 50 10)
-        zero  (flare/zeros (no/factory) [10])
+        zero  (flare/zeros [10])
         init-output (node/const "h0" zero)
         init-state (node/const "c0"  zero)
         input (node/const "x"  (repeat 50 1))

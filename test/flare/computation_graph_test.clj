@@ -10,8 +10,7 @@
 (flare/set! {:factory (no/factory)})
 
 (defn get-node [name shape]
-  (let [factory (:factory (flare/state))
-        t (flare/zeros factory shape)]
+  (let [t (flare/zeros shape)]
     (node/const name t)))
 
 (deftest scope-test
