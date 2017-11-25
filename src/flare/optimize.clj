@@ -24,7 +24,6 @@
         clip-max (Math/abs grad-clip)]
     (doseq [[pname param-node] (seq model)]
       (flare/transform!
-       (model/tensor-factory model)
        (:grad param-node)
        (fn ^double [^double x]
          (clip (* normalizer x) clip-min clip-max))))))
@@ -46,17 +45,15 @@
   "Reset all gradients except the target node"
   [optimizer model]
   ;; zero out gradients for param nodes
-  (let [factory (model/tensor-factory model)]
-    (doseq [[_ param-node] model]
-      (flare/transform! factory (:grad param-node) 0.0))))
+  (doseq [[_ param-node] model]
+    (flare/transform! (:grad param-node) 0.0)))
 
 (defrecord SGD [factory ^double alpha]
   Optimizer
   ;; intentional no-op
   (init [this params-node] nil)
   (update-params! [this params-node state]
-    (flare/transform! 
-     factory 
+    (flare/transform!
      (:value params-node)
      (:grad params-node)
      (fn ^double [^double cur ^double grad]
@@ -76,23 +73,23 @@
           {:keys [exp-grad-sqs, exp-delta-sqs, delta]} state]
       ;; updaete gradient squared
       ;; E[g2_t] = gamma E[g2_{t-1}] + (1-gamma)  g2_t
-      (flare/transform! factory exp-grad-sqs g
+      (flare/transform! exp-grad-sqs g
        (fn ^double [^double cur ^double gi]
          (+ (* gamma cur) (* (- 1.0 gamma) gi gi))))
       ;; copy gradient to update
-      (flare/copy! factory delta g)
+      (flare/copy! delta g)
       ;; make update look like
-      (flare/transform! factory delta exp-grad-sqs
+      (flare/transform! delta exp-grad-sqs
         (fn ^double [^double gi ^double G2i]
           (/ gi (Math/sqrt (+ epsilon G2i)))))
-      (flare/transform! factory delta exp-delta-sqs
+      (flare/transform! delta exp-delta-sqs
         (fn ^double [^double gi ^double d2i]
           (* gi (Math/sqrt (+ epsilon d2i)))))
       ;; perform update
-      (flare/transform! factory v delta
+      (flare/transform! v delta
         (fn ^double [^double cur ^double u]
           (- cur (* eta u))))
-      (flare/transform! factory exp-delta-sqs delta
+      (flare/transform! exp-delta-sqs delta
          (fn ^double [^double cur ^double di]
            (+ (* gamma cur) (* (- 1.0 gamma) di di))))
       state)))
@@ -121,7 +118,7 @@
         (model/from-doubles! model xs)
         ;; clear gradients 
         (doseq [[_ n] model]
-          (flare/transform! factory (:grad n) 0.0))
+          (flare/transform! (:grad n) 0.0))
         (loop [sum-loss 0.0 data data]
           (if-let [x (first data)]
             (when-let [g (build-graph x)]
@@ -130,7 +127,7 @@
                         (compute/forward-pass! (compute/with-model-params model g) factory))
                     loss (first (:value n))]
                 ;; accumulate gradient
-                (assoc n :grad (flare/copy! factory (:grad n) [1]))
+                (assoc n :grad (flare/copy! (:grad n) [1]))
                 (compute/backward-pass! n)
                 (recur (+ sum-loss ^double loss) (next data))))
             [sum-loss (model/to-doubles model :grad)]))))))
@@ -140,7 +137,8 @@
         rng #(- (* 2.0 (Math/random)) 1.0)
         dir (repeatedly (alength xs) rng)
         [fx grad] (val-at diff-fn xs)
-        get-bump (fn [alpha] (map (fn [x d] (+ x (* alpha d))) xs dir))
+        get-bump (fn [alpha]
+                   (map (fn [x d] (+ x (* alpha d))) xs dir))
         expected (reduce + (map * dir grad))]
     (println "Start bump " [fx grad])
     (loop [eps 0.5]

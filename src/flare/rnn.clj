@@ -25,8 +25,8 @@
        prev->hidden (module/affine model (* 4 hidden-dim) [hidden-dim])
        factory (model/tensor-factory model)
        zero  (flare/zeros factory [hidden-dim])
-       init-output (node/const factory "h0" zero)
-        init-state (node/const factory "c0"  zero)]
+       init-output (node/const "h0" zero)
+       init-state (node/const "c0"  zero)]
     (reify RNNCell
       (cell-model [this] model)
       (output-dim [this] hidden-dim)

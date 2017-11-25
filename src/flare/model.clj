@@ -94,7 +94,6 @@
   (doseq [[_ node] (seq model)]
     (when-let [init (:init node)]
       (flare/transform!
-       (tensor-factory model)
        (:value node)
        (get-param-rng init)))))
 
@@ -125,7 +124,7 @@
                    init-spec (assoc init-spec :rand-seed (hash param-name))
                    get-param-val (get-param-rng init-spec)]
                ;; initialize param vals from init-spec
-               (flare/transform! factory (:value node) get-param-val)
+               (flare/transform! (:value node) get-param-val)
                (.put m param-name node)
                node)))
          (-add-param-metadata! [this param-name key val]
@@ -146,7 +145,7 @@
 
              (when-let [param (.get m param-name)]
                (let [param-tensor (:value param)]
-                 (flare/copy! factory param-tensor tensor-data)))))
+                 (flare/copy! param-tensor tensor-data)))))
 
          clojure.lang.Seqable
          (seq [this]
@@ -191,7 +190,7 @@
       (if-let [[k n] (first es)]
         (let [num-vals (int (apply * (:shape n)))
               vals (Arrays/copyOfRange xs offset (+ offset num-vals))]
-          (flare/copy! factory (:value n) (seq vals))
+          (flare/copy! (:value n) (seq vals))
           (recur (next es) (+ offset num-vals)))
         model))))
 

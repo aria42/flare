@@ -1,13 +1,14 @@
 (ns flare.computation-graph
-  "Abstractions for constructing computation graphs from other nodes. The public
-   methods for operations are at bottom of this ns. The key protocols are 
-   as follows:
+  "Abstractions for constructing computation graphs using graph operations.
+   The public methods for operations are at bottom of this ns.
+   The key protocols are  as follows:
 
    * `GraphOp` a computational graph operation that knows nothing about tensor
      implementation, but can validate if inputs nodes are valid and predict
      output shape
    * `TensorOp` an implementation of a specific graph operation which performs
-     forward/backwad operation."
+     forward/backwad operation.
+  "
   (:refer-clojure :exclude [+ * concat])
   (:require [flare.core :as flare]
             [flare.graph :as graph]

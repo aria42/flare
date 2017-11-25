@@ -249,15 +249,6 @@
                       (if (= idx gold-idx) 1.0 0.0)))))))))
     node))
 
-#_(defn ^:static hadamard [out! x y reset?]
-  (if (vctr? x)
-    (alter! out! (fn ^double [^long i ^double cur]
-                   (let [val (* (real/entry x i) (real/entry y i))]
-                     (if reset? val (+ cur val)))))
-    (alter! out! (fn ^double [^long i ^long j ^double cur]
-                   (let [val (* (real/entry x i j) (real/entry y i j))]
-                     (if reset? val (+ cur val)))))))
-
 (defrecord ArgMaxTensorOp []
   cg/TensorOp
   (ensure-valid?! [this [X]]
@@ -508,11 +499,11 @@
 
 (defonce *cached-zeros (atom {}))
 
-(defn zero-fill [factory t]
-  (let [shape (flare/shape factory t)]
+(defn zero-fill [t]
+  (let [shape (flare/shape t)]
     (if-let [cached (get @*cached-zeros shape)]
       (copy! cached t)
-      (let [z (flare/zeros factory shape)]
+      (let [z (-zeros shape)]
         (swap! *cached-zeros assoc shape z)
         (copy! z t)))))
 
@@ -525,47 +516,45 @@
     (instance? clojure.lang.IFn$ODDD fn) :oddd-fn
     :else (throw (ex-info "Don't recognize fn"))))
 
-(defrecord ^:private Factory []
-  flare/PTensorFactory
-  (get-op [this op-key]
-    ((get +tensor-ops+ op-key)))
-  (transform! [this tensor get-val]
-    (let [get-val ^IFn$ODD get-val
-          type (-transform-type get-val)
-          dims (when (identical? type :odd-fn)
-                 (long-array (if (vctr? tensor) 1 2)))
-          fixed-return (double (if (identical? type :double) get-val 0.0))]
-      (if (and (identical? type :double) (zero? fixed-return))
-        (zero-fill this tensor)
-        (alter! tensor
-                (case [type (vctr? tensor)]
-                  [:double true]
-                  (fn cv ^double [^long i ^double x] fixed-return)
-                  [:odd-fn true]
-                  (fn ov ^double [^long i ^double x]
-                    (aset dims (int 0) i)
-                    (.invokePrim ^IFn$ODD get-val dims x))
-                  [:dd-fn true]
-                  (fn dv ^double [^long _ ^double x]
-                    (.invokePrim ^IFn$DD get-val x))
-                  [:double false]
-                  (fn dm ^double [^long i ^long j ^double x] fixed-return)
-                  [:odd-fn false]
-                  (fn ff ^double [^long i ^long j ^double x]
-                    (aset dims (int 0) i)
-                    (aset dims (int 1) j)
-                    (.invokePrim ^IFn$ODD get-val dims x))
-                  [:dd-fn false]
-                  (fn ff ^double [^long i ^long j ^double x]
-                    (.invokePrim ^IFn$DD get-val x)))))))
-  (transform! [this tensor other-tensor get-val]
-    (let [get-val ^IFn$ODD get-val
+(defn -transform
+  ([tensor get-val]
+   (let [get-val ^IFn$ODD get-val
+         type (-transform-type get-val)
+         dims (when (identical? type :odd-fn)
+                (long-array (if (vctr? tensor) 1 2)))
+         fixed-return (double (if (identical? type :double) get-val 0.0))]
+     (if (and (identical? type :double) (zero? fixed-return))
+       (zero-fill tensor)
+       (alter! tensor
+               (case [type (vctr? tensor)]
+                 [:double true]
+                 (fn cv ^double [^long i ^double x] fixed-return)
+                 [:odd-fn true]
+                 (fn ov ^double [^long i ^double x]
+                   (aset dims (int 0) i)
+                   (.invokePrim ^IFn$ODD get-val dims x))
+                 [:dd-fn true]
+                 (fn dv ^double [^long _ ^double x]
+                   (.invokePrim ^IFn$DD get-val x))
+                 [:double false]
+                 (fn dm ^double [^long i ^long j ^double x] fixed-return)
+                 [:odd-fn false]
+                 (fn ff ^double [^long i ^long j ^double x]
+                   (aset dims (int 0) i)
+                   (aset dims (int 1) j)
+                   (.invokePrim ^IFn$ODD get-val dims x))
+                 [:dd-fn false]
+                 (fn ff ^double [^long i ^long j ^double x]
+                   (.invokePrim ^IFn$DD get-val x)))))
+     tensor))
+  ([tensor other-tensor get-val]
+   (let [get-val ^IFn$ODD get-val
           type (-transform-type get-val)
           dims (when (identical? type :od-fn)
                  (long-array (if (vctr? tensor) 1 2)))
           fixed-return (double (if (identical? type :double) 1.0 0.0))
-          shape (flare/shape this tensor)
-          oshape (flare/shape this other-tensor)]
+          shape (flare/shape tensor)
+          oshape (flare/shape other-tensor)]
      (when-not (= shape oshape)
        (throw (ex-info "Non-matching shapes"
                        {:shape shape :other-shape oshape})))
@@ -590,30 +579,16 @@
                  (aset dims (int 0) i)
                  (aset dims (int 1) j)
                  (let [other-val (real/entry other-tensor i j)]
-                   (.invokePrim ^IFn$ODDD get-val dims x other-val)))))))
-  (shape [this t]
-    (if (vctr? t)
-      [(dim t)]
-      [(mrows t) (ncols t)]))
+                   (.invokePrim ^IFn$ODDD get-val dims x other-val))))))))
+
+(defrecord ^:private Factory []
+  flare/PTensorFactory
+  (get-op [this op-key]
+    ((get +tensor-ops+ op-key)))
   (from [this nums]
     (if (or (vctr? nums) (matrix? nums))
       nums
       (-from-nums nums (flare/guess-shape nums))))
-
-  (copy! [this tensor! nums]
-    (cond
-      ;; fast if the nums is already neanderthal
-      (or (matrix? nums) (vctr? nums)) (copy! nums tensor!)
-      ;; faster to use nth and directly alter
-      (vctr? tensor!) (let [nums (if (vector? nums) (vec nums) nums)]
-                        (alter! tensor!
-                                (fn ^double [^long idx ^double _]
-                                  (nth nums idx))))
-      ;; give up on performance....
-      :else (let [shape (if (vctr? tensor!)
-                          [(dim tensor!)]
-                          [(mrows tensor!) (ncols tensor!)])]
-              (copy! (-from-nums nums shape) tensor!))))
   (zeros [this shape]
     (-zeros shape))
 
@@ -634,6 +609,59 @@
           [k {:forward (AtomicLong. 0)
               :backward (AtomicLong. 0)}])))
 
-(defn factory [& [num-to-cache]]
+(def ^:private static-factory
   (let [f (->Factory)]
-    (with-meta f (assoc-in (meta f) [:debug :perf] (-build-perf-map)))))
+    (with-meta f
+      (assoc-in (meta f) [:debug :perf] (-build-perf-map)))))
+
+(defn factory []
+  static-factory)
+
+;; Vector Class -- classname internal so don't want to expose
+(extend-protocol flare/Tensor
+  (class (dv 1))
+
+  (factory [this] static-factory)
+  (add [this other] (np/axpy other this))
+  (add [this alpha other] (np/axpy alpha other this))
+  (add! [this other] (np/axpy! other this))
+  (add! [this alpha other] (np/axpy! alpha other this))
+  (transform
+    ([this get-val] (-transform (copy this) get-val))
+    ([this other get-val] (-transform (copy this) other get-val)))
+  (transform!
+    ([this get-val] (-transform this get-val))
+    ([this other get-val] (-transform this other get-val)))
+  (shape [this] [(dim this)])
+  (copy! [this other]
+         (if (vctr? other)
+           (copy! other this)
+           (let [nums (if (vector? other) (vec other) other)]
+             (alter! this
+                     (fn ^double [^long idx ^double _]
+                       (nth nums idx)))))))
+
+;; Matrix Class -- classname internal so don't want to expose
+;; because the class isn't a symbol, bug doesn't let us do
+;; multiple in a single expression
+(extend-protocol  flare/Tensor
+  (class (dge 1 1))
+
+  (factory [this] static-factory)
+  (add
+    ([this other] (np/axpy other this))
+    ([this alpha other] (np/axpy alpha other this)))
+  (add!
+    ([this other] (np/axpy! other this))
+    ([this alpha other] (np/axpy! alpha other this)))
+  (transform
+    ([this get-val] (-transform (copy this) get-val))
+    ([this other get-val] (-transform this other get-val)))
+  (transform!
+    ([this get-val] (-transform this get-val))
+    ([this other get-val] (-transform this other get-val)))
+  (shape [this] [(mrows this) (ncols this)])
+  (copy! [this other]
+         (if (matrix? other)
+           (copy! other this)
+           (copy! (-from-nums other (flare/shape this)) this))))

@@ -5,7 +5,7 @@
   (:import [java.util LinkedList]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Tensor Factory
+;; Tensor and Factory protocols
 
 (defprotocol PTensorFactory
   "A `PTensorFactory` knows how to make and manipulate tensors. The tensor
@@ -15,38 +15,54 @@
       * Tensors should be seqable (might revisit this)
       * Tensors are mutable objects (duh, performance) "
   (from [this data]
-    "create a tensor from `data`. Should minimally accept
+    "create a tensor from `data` (satisfies `Tensor`). Should minimally accept
      (nested) sequences of numbers, but can also effectively
      copy an existing tensor")
   (get-op [this op-key]
     "returns the `TensorOp` associated with the `op-key`")
   (zeros [this shape]
-    "create a 0.0 filled tensor of a given shape")
-  (transform!
-    [this tensor get-val]
-    [this tensor other-tensor get-val]
-    "In-place transform of a `tensor` using the `get-val` function,
+    "create a 0.0 filled tensor of a given shape"))
+
+(defprotocol Tensor
+  (factory [this]
+    "returns `PTensorFactory` underlying this tensor")
+  (add
+    [this other]
+    [this alpha other]
+    "return new tensor which adds this to `other`
+     and possibly scales `other` by scalar `alpha`")
+  (add!
+    [this other]
+    [this alpha other]
+    "mutable version of `add` that updates `this`")
+  (transform
+    [this get-val]
+    [this other-tensor get-val]
+    "Create a new `tensor` using the `get-val` function,
      which can be a few different things
 
-      [this tensor get-val]
+      [this get-val]
       ==============================
        * A fixed double to fill `tensor`
        * A `IFn$ODD` primitive function taking (dims, existing) which
          returns new value for the position
 
 
-      [this tensor other-tensor get-val]
+      [this other-tensor get-val]
       ================================
       Assumes other-tensor shape matches tensor
       * `IFn$DDD` takes (cur-val, other-val) and returns new value
       * `IFn$ODDD` takes (position, cur-val, other-val) and position
         is the long-array of the location")
-  (copy! [this dst-tensor! src-tensor-like]
-    "copy from source to destination. The src should be same set of things
+  (transform!
+    [this get-val]
+    [this other-tensor get-val]
+    "mutable version of `transform!` that updates `this`")
+  (copy! [this src-tensor-like]
+    "copy from source to this tensor. The src should be same set of things
      accdepted by `PTensorFactory/from`")
-  (shape [this t]
+  (shape [this]
     "return the shape of the tennsor as integer (clojure) vector"))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Tensor Shape
@@ -91,7 +107,7 @@
       (get-obj [this shape]
         (if-let [^LinkedList lst (.get m shape)]
           (if-let [t (.poll lst)]
-            (do (transform! factory t zero)
+            (do (transform! t zero)
                 t)
             (zeros factory shape))
           (zeros factory shape)))

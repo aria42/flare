@@ -43,9 +43,9 @@
           x (add-params! m [2 3] :name "x")
           y (add-params! m [3 2] :name "y")
           z (add-params! m [3] :name "z")]
-      (flare/copy! f (:value x) (range 6))
-      (flare/copy! f (:value y) (range 6 12))
-      (flare/copy! f (:value z) (range 12 15))
+      (flare/copy! (:value x) (range 6))
+      (flare/copy! (:value y) (range 6 12))
+      (flare/copy! (:value z) (range 12 15))
       ;; should be [0.0-15.0)
       (let [xs (model/to-doubles m)]
         (is (= (map double (range 15)) (seq xs))))

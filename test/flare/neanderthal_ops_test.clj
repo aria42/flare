@@ -40,26 +40,26 @@
         t (flare/zeros f [10])
         m (flare/zeros f [2 2])]
     (testing "set constant value"
-      (flare/transform! f t 2.0)
+      (flare/transform! t 2.0)
       (is (= (repeat 10 2.0) (seq t)))
-      (flare/transform! f m 2.0)
+      (flare/transform! m 2.0)
       (is (= [[2. 2.] [2. 2.]] (seq m))))
     (testing "set function value"
-      (flare/transform! f t 0.0)
-      (flare/transform! f t (fn ^double [^longs idxs ^double x]
+      (flare/transform! t 0.0)
+      (flare/transform! t (fn ^double [^longs idxs ^double x]
                                 (+ x (double (aget idxs 0)))))
       (is (= (map double (range 10)) (seq t)))
-      (flare/transform! f m 0.0)
-      (flare/transform! f m
+      (flare/transform! m 0.0)
+      (flare/transform! m
          (fn ^double [^longs idxs ^double x]
            (double (+ x (aget idxs 0) (aget idxs 1)))))
       (is (= [[0.0 1.0] [1.0 2.0]] (seq m))))
     (testing "set function and other value"
       (let [o (flare/from f (range 10))]
-        (flare/transform! f t 0.0)
-        (flare/transform! f t o (fn ^double [^double cur ^double other]
+        (flare/transform! t 0.0)
+        (flare/transform! t o (fn ^double [^double cur ^double other]
                                     (* other other)))
-        (flare/transform! f t o (fn ^double [^double cur ^double other]
+        (flare/transform! t o (fn ^double [^double cur ^double other]
                                     (+ cur (* other other))))
         (is (= (for [x (range 10)] (* 2.0 x x)) (seq t)))))))
 

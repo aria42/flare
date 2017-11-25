@@ -29,13 +29,12 @@
         (throw (ex-info "Missing required key" {:key (.ref-name n)}))))))
 
 (defn with-model-params [model ^Node node]
-  (let [factory (model/tensor-factory model)]
-    (graph/bottom-up-walk
-     node
-     (fn [^Node n]
-       (if (identical? (.type n) :params)
-         (model/canonical-node model (.ref-name n))
-         n)))))
+  (graph/bottom-up-walk
+   node
+   (fn [^Node n]
+     (if (identical? (.type n) :params)
+       (model/canonical-node model (.ref-name n))
+       n))))
 
 (defn forward-pass!
   "NOTE: Don't use this

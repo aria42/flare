@@ -67,7 +67,7 @@
       ;; build loss node for two-arguments
       (graph [this sent label]
         (when-let [logits (module/graph this sent)]
-          (let [label-node (node/const factory "label" [label])]
+          (let [label-node (node/const "label" [label])]
             (cg/cross-entropy-loss logits label-node)))))))
 
 (defn load-data [path]
@@ -123,10 +123,10 @@
   (do
     (def emb (load-embeddings opts))
     (def model (model/simple-param-collection))
-   (def classifier (lstm-sent-classifier model emb 10 2))
-   (def loss-fn (fn [[sent tag]]
-                  (-> classifier
-                      (with-meta {:train? true})
-                      (module/graph sent tag))))
-   (def df (optimize/loss-fn model loss-fn train-data))
-   (optimize/rand-bump-test df (model/to-doubles model))))
+    (def classifier (lstm-sent-classifier model emb 10 2))
+    (def loss-fn (fn [[sent tag]]
+                   (-> classifier
+                       (with-meta {:train? true})
+                       (module/graph sent tag))))
+    (def df (optimize/loss-fn model loss-fn train-data))
+    (optimize/rand-bump-test df (model/to-doubles model))))
