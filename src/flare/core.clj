@@ -13,14 +13,17 @@
    tensors should have:
 
       * Tensors should be seqable (might revisit this)
-      * Tensors are mutable objects (duh, performance) "
-  (from [this data]
+      * Tensors are mutable objects (duh, performance)
+
+  For external API use, use the `zeros` and `from` wrappers
+  below which can default the tensor factory"
+  (get-op [this op-key]
+    "returns the `TensorOp` associated with the `op-key`")
+  (-from [this data]
     "create a tensor from `data` (satisfies `Tensor`). Should minimally accept
      (nested) sequences of numbers, but can also effectively
      copy an existing tensor")
-  (get-op [this op-key]
-    "returns the `TensorOp` associated with the `op-key`")
-  (zeros [this shape]
+  (-zeros [this shape]
     "create a 0.0 filled tensor of a given shape"))
 
 (defprotocol Tensor
@@ -109,8 +112,8 @@
           (if-let [t (.poll lst)]
             (do (transform! t zero)
                 t)
-            (zeros factory shape))
-          (zeros factory shape)))
+            (-zeros factory shape))
+          (-zeros factory shape)))
       (return-obj [this shape t]
         (if-let [^LinkedList lst (.get m shape)]
           (.offer lst t)
@@ -140,9 +143,26 @@
                       {:state state})))
     state))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Maain Functions
+
 (defn set!
   [init-state]
   (reset! *state init-state))
+
+(defn zeros
+  "create a zero tensor with given shape using default tensor factory"
+  ([shape]
+   (-zeros (:factory (state)) shape))
+  ([factory shape]
+   (-zeros factory shape)))
+
+(defn from
+  "coerce data into a tensor, should work with nested clojure seqs of numbers"
+  ([factory data]
+   (-from factory data))
+  ([data]
+   (-from (:factory (state)) data)))
 
 (defn init!
   "Defaults the state of flare with following
@@ -156,6 +176,6 @@
          ns (find-ns ns-symb)
          factory ((ns-resolve ns 'factory))]
      (reset! *state
-      {:eager? true
-       :factory factory
-       :cache (cache factory num-to-cache)}))))
+             {:eager? true
+              :factory factory
+              :cache (cache factory num-to-cache)}))))

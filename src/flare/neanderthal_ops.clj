@@ -27,7 +27,7 @@
     (throw (ex-info "Must use a vector (1d) or matrix (2d) shape"
                     {:shape shape}))))
 
-(defn -zeros [shape]
+(defn -mk-zeros [shape]
   (case (count shape)
     1 (dv (first shape))
     2 (-mk-matrix (first shape) (second shape))
@@ -290,7 +290,7 @@
     node))
 
 (defn dropout-mask [node]
-  (let [t (-zeros (:shape node))
+  (let [t (-mk-zeros (:shape node))
         ^double prob (get-in node [:graph-op :prob])]
     (alter! t (fn ^double [^double _]
                 (if (< (Math/random) prob)
@@ -503,7 +503,7 @@
   (let [shape (flare/shape t)]
     (if-let [cached (get @*cached-zeros shape)]
       (copy! cached t)
-      (let [z (-zeros shape)]
+      (let [z (-mk-zeros shape)]
         (swap! *cached-zeros assoc shape z)
         (copy! z t)))))
 
@@ -585,12 +585,12 @@
   flare/PTensorFactory
   (get-op [this op-key]
     ((get +tensor-ops+ op-key)))
-  (from [this nums]
+  (-from [this nums]
     (if (or (vctr? nums) (matrix? nums))
       nums
       (-from-nums nums (flare/guess-shape nums))))
-  (zeros [this shape]
-    (-zeros shape))
+  (-zeros [this shape]
+    (-mk-zeros shape))
 
 
   flare/-InternalPTensorFactory

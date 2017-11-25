@@ -44,7 +44,8 @@
 
 (flare/init!)
 
-(defn lstm-sent-classifier [model word-emb ^long lstm-size num-classes]
+(defn lstm-sent-classifier 
+  [model word-emb ^long lstm-size ^long num-classes]
   (node/let-scope
       ;; let-scope so the parameters get smart-nesting
       [^long emb-size (embeddings/embedding-size word-emb)
@@ -52,13 +53,12 @@
        input-size (* num-dirs emb-size)
        hidden-size (* num-dirs lstm-size)
        lstm (rnn/lstm-cell model input-size hidden-size)
-       factory (model/tensor-factory model)
        hidden->logits (module/affine model num-classes [hidden-size])]
     (reify
       module/PModule
       ;; build logits
       (graph [this sent]
-        (when-let [inputs (seq (embeddings/sent-nodes factory word-emb sent))]
+        (when-let [inputs (seq (embeddings/sent-nodes word-emb sent))]
           (let [[outputs _] (rnn/build-seq lstm inputs (= num-dirs 2))
                 train? (:train? (meta this))
                 hidden (last outputs)
@@ -71,8 +71,8 @@
             (cg/cross-entropy-loss logits label-node)))))))
 
 (defn load-data [path]
-  (for [line (line-seq (io/reader path))
-        :let [[tag & sent] (.split (.trim ^String line) " ")]]
+  (for [^String line (line-seq (io/reader path))
+        :let [[tag & sent] (.split (.trim line) " ")]]
     [sent (double (Integer/parseInt tag))]))
 
 (defn train [{:keys [lstm-size, num-classes, train-file, test-file] :as opts}]
@@ -100,18 +100,10 @@
             ;; Report performance info on tensor-ops
             (report/callback #(-> (flare/state) :factory flare/debug-info))]
            :learning-rate 1}]
-    (println "Params " (map first (seq model)))
+    ;; prints shape of all parameters 
+    (println "Params " (map (juxt first (comp :shape second)) (seq model)))
     (println "Total # params " (model/total-num-params model))
     (train/train! model loss-fn gen-batches train-opts)))
-
-(comment
-  (def opts {:embed-file "data/small-glove.50d.txt"
-             :lstm-size 100
-             :num-classes 2
-             :num-data 1000
-             :train-file "data/sentiment-train10k.txt"
-             :test-file "data/sentiment-test10k.txt"
-             :emb-size 50}))
 
 (defn -main [& args]
   (let [parse (parse-opts args cli-options)]
@@ -119,11 +111,19 @@
     (train (:options parse))))
 
 (comment
+
+  (def opts {:embed-file "data/small-glove.50d.txt"
+             :lstm-size 100
+             :num-classes 2
+             :num-data 1000
+             :train-file "data/sentiment-train10k.txt"
+             :test-file "data/sentiment-test10k.txt"
+             :emb-size 50})
   ;; Hack to test LSTM end-to-end gradient
   (do
     (def emb (load-embeddings opts))
     (def model (model/simple-param-collection))
-    (def classifier (lstm-sent-classifier model emb 10 2))
+    (def classifier (lstm-sent-lassifier model emb 10 2))
     (def loss-fn (fn [[sent tag]]
                    (-> classifier
                        (with-meta {:train? true})
