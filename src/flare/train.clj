@@ -37,7 +37,7 @@
           (let [loss-node (if eager?
                             loss-node
                             (compute/forward-pass! factory loss-node cache))
-                _ (flare/copy! factory (:grad loss-node) [1.0])
+                _ (flare/copy! (:grad loss-node) [1.0])
                 loss-val (-> loss-node :value seq first)]
             ;; side-effect to update gradients
             (compute/backward-pass! factory loss-node cache)

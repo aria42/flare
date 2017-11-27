@@ -52,7 +52,7 @@
           X (model/add-params! model [2])
           Z (cg/+ X X)]
       ;; hack to set values for params
-      (flare/copy! factory
+      (flare/copy! 
          (:value (get params-map (:ref-name X)))
          [2.0 2.0])
       (let [Z (forward-pass!  factory Z)]

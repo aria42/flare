@@ -11,14 +11,13 @@
 (flare/set! {:eager? false :factory (no/factory)})
 
 (deftest lstm-cell-test
-  (let [factory (:factory (flare/state))
-        m (model/simple-param-collection)
+  (let [m (model/simple-param-collection)
         cell (flare.rnn/lstm-cell m 50 10)
-        zero  (flare/zeros factory [10])
+        zero  (flare/zeros [10])
         init-output (node/const "h0" zero)
         init-state (node/const "c0"  zero)
-        input (node/const factory "x"  (repeat 50 1))
+        input (node/const "x"  (repeat 50 1))
         [output state] (flare.rnn/add-input! cell input init-output init-state)]
     (is (= (:shape output) [10]))
     (is (= (:shape state) [10]))
-    (is (= [10] (flare/shape factory (:value (compute/forward-pass! factory output)))))))
+    (is (= [10] (flare/shape (:value (compute/forward-pass! output)))))))

@@ -54,7 +54,6 @@
        (cg/+ left right))
   ```
 
-
   Then the model has `(\"left/W\",\"left/b\", \"right/W\", \"right/b\")`"
   [bindings & body]
   (let [new-bindings (->> bindings
@@ -69,17 +68,17 @@
 
 (defn ^Node const
   "A node which is a constant in a graph, typically used in dynamic graphs
-  as leaves. The `data` is meant to be anything `flare.core/from` would
-  accept for the tensor factory"
-  ([factory ^String input-name data]
-   (let [t (flare/from factory data)]
+  as leaves. The `data` is either a tensor or the default factory
+  can make a tensor from it."
+  ([^String input-name data]
+   (let [t (if (satisfies? flare/Tensor data)
+             data
+             (flare/from (:factory (flare/state)) data))]
      (map->Node
       {:type :constant
-       :shape (flare/shape factory t)
+       :shape (flare/shape t)
        :value t
        :ref-name (scoped-name input-name)})))
-  ([^String input-name data]
-   (const (:factory (flare/state)) input-name data))
   ([data]
    (const (name (gensym "input")) data)))
 

@@ -20,16 +20,16 @@
 
 (deftest param-collection-test
   (testing "simple param collection test"
-    (let [m (simple-param-collection (no/factory))
+    (let [m (simple-param-collection)
           n (add-params! m  [2 2] :name "W")]
       (is (= n (canonical-node m "W")))
       (is (= n (get (into {} (seq m)) "W")))))
   (testing "disallow repeated names"
-    (let [m (simple-param-collection (no/factory))]
+    (let [m (simple-param-collection)]
       (add-params! m [2 2] :name "W")
       (is (thrown? Exception (add-params! m [2 2] "W")))))
   (testing "can init!"
-    (let [m (simple-param-collection (no/factory))]
+    (let [m (simple-param-collection)]
       (add-params! m [2 2] :name "W1")
       (add-params! m [2 2] :name "W2")
       (doseq [k ["W1" "W2"]]
@@ -38,14 +38,13 @@
 
 (deftest round-trip-doubles
   (testing "round trip dobules"
-    (let [f (no/factory)
-          m (simple-param-collection f)
+    (let [m (simple-param-collection)
           x (add-params! m [2 3] :name "x")
           y (add-params! m [3 2] :name "y")
           z (add-params! m [3] :name "z")]
-      (flare/copy! f (:value x) (range 6))
-      (flare/copy! f (:value y) (range 6 12))
-      (flare/copy! f (:value z) (range 12 15))
+      (flare/copy! (:value x) (range 6))
+      (flare/copy! (:value y) (range 6 12))
+      (flare/copy! (:value z) (range 12 15))
       ;; should be [0.0-15.0)
       (let [xs (model/to-doubles m)]
         (is (= (map double (range 15)) (seq xs))))

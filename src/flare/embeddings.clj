@@ -8,11 +8,19 @@
   (vocab [this])
   (embedding-size [this]))
 
-(defn sent-nodes [factory emb sent]
-  (for [word sent
-        :let [e (lookup emb word)]
-        :when e]
-    (node/const factory (node/gen-name "word") e)))
+(defn sent-nodes
+  "take a sentence and return sequence of constant node
+   tensors, where each consant has the original word
+   as part of the name.
+
+   Will use `unk` if given for unknown tokens, or omit
+   if `unk` isn't passed in"
+  ([emb sent] (sent-nodes emb sent nil))
+  ([emb sent unk]
+   (for [word sent
+         :let [e (lookup emb word)]
+         :when (or e unk)]
+     (node/const (node/gen-name "word") (or e unk)))))
 
 (deftype FixedEmbedding [^java.util.Map m ^long emb-size]
   Embedding
@@ -31,7 +39,7 @@
       (when-let [dupe (.get m obj)]
         (throw (ex-info "Duplicate entry" {:dupe obj})))
       (let [t (flare/from factory nums)
-            s (flare/shape factory t)]
+            s (flare/shape t)]
         (when (not= s expected-shape)
           (throw (ex-info "embedding doesn't have same shape"
                           {:expected [embedding-size] :actual s})))
