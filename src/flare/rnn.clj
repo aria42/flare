@@ -19,12 +19,12 @@
   without any peepholes or other adaptations."
   [model ^long input-dim ^long hidden-dim]
   (node/let-scope
-      [;; stack (input, output, forget, gate) params
-       ;; there is x_t -> h_t and h_{t-1} -> h_t transforms
-       input->hidden (module/affine model (* 4 hidden-dim) [input-dim])
-       prev->hidden (module/affine model (* 4 hidden-dim) [hidden-dim])
-       factory (model/tensor-factory model)
-       zero  (flare/zeros factory [hidden-dim])
+      [;; concatenate previous output and cur input
+       cat-dim (+ input-dim hidden-dim)
+       ;; stack (input, output, forget, state) params
+       ;; one affine module W_(i,o,f,s) * x_(prev, input) + b_(i,o,f,s)
+       input->gates (module/affine model (* 4 hidden-dim) [cat-dim])
+       zero  (flare/zeros [hidden-dim])
        init-output (node/const "h0" zero)
        init-state (node/const "c0"  zero)]
     (reify RNNCell
@@ -35,19 +35,17 @@
       (add-input! [this input last-output last-state]
         (flare/validate-shape! [input-dim] (:shape input))
         (flare/validate-shape! [hidden-dim] (:shape last-state))
-        (let [i->h (module/graph input->hidden input)
-              p->h (module/graph prev->hidden last-output)
-              acts (cg/+ i->h p->h)
+        (let [x (cg/concat 0 input last-output)
+              gates (module/graph input->gates x)
               ;; split (i,o,f) and state
-              [iof, state] (cg/split acts 0 (* 3 hidden-dim))
-              ;; split iof into (input, forget, output)
+              [iof, state] (cg/split gates 0 (* 3 hidden-dim))
+              ;; one big sigmloid then split into (input, forget, output)
               [input-probs forget-probs output-probs]
                 (cg/split (cg/sigmoid iof) 0 hidden-dim (* 2 hidden-dim))
-              state (cg/tanh state)
               ;; combine hadamard of forget past, keep present
               state (cg/+
                      (cg/hadamard forget-probs last-state)
-                     (cg/hadamard input-probs state))
+                     (cg/hadamard input-probs (cg/tanh state)))
               output (cg/hadamard output-probs (cg/tanh state))]
           [output state])))))
 

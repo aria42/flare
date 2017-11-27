@@ -1,6 +1,6 @@
 (defproject aria42/flare "0.1.0-SNAPSHOT"
   :description "Dynamic Tensor Graph library in Clojure (think PyTorch, DynNet, etc.)"
-  :url "http://example.com/FIXME"
+  :url "http://github.com/aria42/flare"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :global-vars {*warn-on-reflection* true}
