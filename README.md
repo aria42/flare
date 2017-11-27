@@ -1,6 +1,8 @@
 # flare
 
-A Clojure library for dynamic neural nets (e.g., PyTorch, DynNet). Mostly for learning purposes, but totally useable and pretty performant (see Performance below). Current features:
+<img src="https://aria42.com/images/flare.png" alt="aria42/flare logo" title="flare logo" align="right" width="250" />
+
+A Clojure library for dynamic neural nets (e.g., PyTorch, DynNet). Mostly for learning purposes, but totally useable and pretty performant (see Performance below). See introductry blog post [here](http://aria42.com/blog/2017/11/Flare-Clojure-Neural-Net). Current features:
 
 * Define dynamic neural net graphs tensor (ala PyTorch or DynNet) or use the static graph approach (Tensorflow, Caffe2) for better performance.
 * Supports basic tensor ops (sum, multiply, concat, split, etc.) as well as LSTM cells and fixed embeddings. 
