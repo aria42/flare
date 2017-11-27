@@ -59,9 +59,10 @@
       ;; build logits
       (graph [this sent]
         (when-let [inputs (seq (embeddings/sent-nodes word-emb sent))]
-          (let [[outputs _] (rnn/build-seq lstm inputs (= num-dirs 2))
+          (let [hiddens (rnn/build-seq lstm inputs (= num-dirs 2))
                 train? (:train? (meta this))
-                hidden (last outputs)
+                ;; take last output as hidden
+                hidden (last (map first hiddens))
                 hidden (if train? (cg/dropout 0.5 hidden) hidden)]
             (module/graph hidden->logits hidden))))
       ;; build loss node for two-arguments
