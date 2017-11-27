@@ -101,7 +101,7 @@
            :num-batch 32
            :num-classes 5
            :num-feats 10
-           :num-iters 10})
+           :num-iters 50})
 
 (defn -main [& args]
   (let [parse (parse-opts args cli-options)]
