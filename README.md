@@ -9,6 +9,10 @@ A Clojure library for dynamic neural nets (e.g., PyTorch, DynNet). Mostly for le
 * Currently only supports non-batch operations (working on auto-batching...)
 * Tensor implementation is pluggable, but best is currently [Neanderthal](http://github.com/uncomplicate/neanderthal) which supports Intel MKL, CUDA, and OpenCL. Removed the ND4J implementation, since no clear reason to use given Neanderthal was faster on every operation.
 
+## Installtion
+
+At the moment, the only supported tensor backend is via Neanderthal, which currently only uses [Intel MKL](https://software.intel.com/en-us/mkl). You'll need to install this library (although if you're doing a lot of neural net work locally, you probably already have). Note that if you're on a Mac, you'll need to disable [System Integrity Protection](https://www.imore.com/el-capitan-system-integrity-protection-helps-keep-malware-away), in order for Neanderthal to load the native libs from the `DYLD_LIBRARY_PATH` environmnet variable. 
+
 ## Examples
 
 See some examples in the [`src/flare/examples`](https://github.com/aria42/flare/tree/master/src/flare/examples) directory for usage examples. Single best entry is probably the LSTM example. But here are some simple ones:
