@@ -1,6 +1,6 @@
 # flare
 
-<img src="https://aria42.com/images/flare.png" alt="aria42/flare logo" title="flare logo" align="right" width="250" />
+<img src="http://aria42.com/images/flare.png" alt="aria42/flare logo" title="flare logo" align="right" width="250" />
 
 A Clojure library for dynamic neural nets (e.g., PyTorch, DynNet). Mostly for learning purposes, but totally useable and pretty performant (see Performance below). See introductry blog post [here](http://aria42.com/blog/2017/11/Flare-Clojure-Neural-Net). Current features:
 
