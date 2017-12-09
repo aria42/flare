@@ -61,7 +61,22 @@
                                     (* other other)))
         (flare/transform! t o (fn ^double [^double cur ^double other]
                                     (+ cur (* other other))))
-        (is (= (for [x (range 10)] (* 2.0 x x)) (seq t)))))))
+        (is (= (for [^double x (range 10)] (* 2.0 x x)) (seq t)))))))
+
+(deftest max-test
+  (testing "vec max test"
+    (let [op (->MaxTensorOp)
+          x (dv [1 0 0])
+          y (dv [0 1 0])
+          z (dv [0 0 1])
+          n {:value (dv 3) :grad (dv [1 2 3])
+             :children (map #(hash-map :value % :grad (dv 3)) [x y z])}]
+      (cg/forward-node-pass! op n)
+      (is (= (seq (:value n)) [1.0 1.0 1.0]))
+      (cg/backward-node-pass! op n)
+      (is (=
+           [[1. 0. 0.] [0. 2. 0.] [0. 0. 3.]]
+           (map (comp seq :grad) (:children n)))))))
 
 (deftest mult-tensor-op
   (testing "C = A B"
@@ -158,7 +173,7 @@
         (is (= (:grad A) (dv [1 1])))))))
 
 (defn l2-dist [a b]
-  (->> (map (fn [x y] (Math/pow (double (- x y)) 2.0)) a b)
+  (->> (map (fn [^double x ^double y] (Math/pow (double (- x y)) 2.0)) a b)
        (reduce +)
        Math/sqrt))
 
@@ -206,7 +221,7 @@
               (:flare.neanderthal-ops/probs forward-node)
               (dv [ 0.186 0.307 0.506]))
              0.001))
-        (let [loss-scalar (first (:value forward-node))
+        (let [loss-scalar (double (first (:value forward-node)))
               target-loss (- (Math/log 0.307))]
           (is (< (Math/abs (- target-loss loss-scalar)) 0.001)))
         ;; populate gradient of output

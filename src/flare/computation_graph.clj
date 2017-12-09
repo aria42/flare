@@ -9,7 +9,7 @@
    * `TensorOp` an implementation of a specific graph operation which performs
      forward/backwad operation.
   "
-  (:refer-clojure :exclude [+ * concat])
+  (:refer-clojure :exclude [+ * concat max])
   (:require [flare.core :as flare]
             [flare.graph :as graph]
             [clojure.string :as str]
@@ -326,6 +326,17 @@
         (when (< (inc dim) (count shape))
           (subvec shape (inc dim))))))))
 
+(defrecord MaxOp []
+  GraphOp
+  (op-key [this] :max)
+  (op-descriptor [this] "max")
+  (op-validate! [this [x & inputs]]
+    (when-not (every? #(= (:shape x) (:shape %)) inputs)
+      (throw (ex-info "All inputs must have same shape"
+                      {:shapes (map :shape inputs)}))))
+  (forward-shape [this inputs]
+    (-> inputs first :shape)))
+
 (defrecord DropoutGraphOp [^double prob]
   GraphOp
   (op-key [this] :dropout)
@@ -393,6 +404,12 @@
 (defn concat
   [dim & inputs]
   (add-graph-op (->ConcatOp dim) inputs))
+
+(defn max
+  "Inputs: Tensors of same shape
+   Output: Tensor of input shape where each element is maximum "
+  [& inputs]
+  (add-graph-op (->MaxOp) inputs))
 
 (defn split
   [node dim & split-indices]

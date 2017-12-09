@@ -262,6 +262,55 @@
   (backward-node-pass! [this node]
     (throw (ex-info "Not Supported"))))
 
+(defrecord MaxTensorOp []
+  cg/TensorOp
+  (ensure-valid?! [this [& inputs]]
+    (doseq [x inputs] (ensure-valid-shape?! (:shape x))))
+  (forward-node-pass! [this node]
+    (let [output (:value node)
+          inputs (map :value (:children node))]
+      (copy! (first inputs) output)
+      (doseq [x (rest inputs)]
+        (vect-math/fmax! output x))))
+  (backward-node-pass! [this node]
+    (let [out-val (:value node)
+          out-grad (:grad node)
+          input-vals (mapv :value (:children node))
+          input-grads (mapv :grad (:children node))
+          n (count input-grads)]
+      (if (vctr? out-grad)
+        (dotimes [idx (dim out-grad)]
+          (let [max-val (real/entry out-val idx)]
+            (loop [vec-idx 0]
+              (when (>= vec-idx n)
+                (throw (ex-info "Couldn't find max" {})))
+              (let [vec (nth input-vals vec-idx)
+                    v (real/entry vec idx)]
+                (if (= v max-val)
+                  (let [update (nth input-grads vec-idx)]
+                    (real/entry!
+                     update
+                     idx
+                     (+ (real/entry update idx) (real/entry out-grad idx))))
+                  (recur (inc vec-idx)))))))
+        (dotimes [row-idx (mrows out-grad)]
+          (dotimes [col-idx (ncols out-grad)]
+            (let [max-val (real/entry out-val row-idx col-idx)]
+              (loop [matrix-idx 0]
+                (when (>= matrix-idx n)
+                  (throw (ex-info "Couldn't find max" {})))
+                (let [matrix (nth input-vals matrix-idx)
+                      v (real/entry matrix row-idx col-idx)]
+                  (if (= v max-val)
+                    (let [update (nth input-grads matrix-idx)]
+                      (real/entry!
+                       update
+                       row-idx
+                       col-idx
+                       (+ (real/entry update row-idx col-idx)
+                          (real/entry out-grad row-idx col-idx))))
+                    (recur (inc matrix-idx))))))))))))
+
 (defrecord HadamardTensorOp []
   cg/TensorOp
   (ensure-valid?! [this [X Y]]
