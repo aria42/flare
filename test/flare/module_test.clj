@@ -24,12 +24,15 @@
                :value
                seq)))))
 
+(defn close? [xs ys]
+  (< (reduce + (map (fn [^double x ^double y] (* (- x y) (- x y))) xs ys)) 0.0001))
+
 (deftest from-op-test
   (let [s (from-op (cg/scalar-op :sigmoid))
         x (node/const "x" [1 2])]
-    (is (=
-         [(/ 1.0 (+ 1.0 (Math/exp -1.0)))
-          (/ 1.0 (+ 1.0 (Math/exp -2.0))) ]
+    (is (close?
+         [(/ 1.0 (+ 1.0 (FastMath/exp -1.0)))
+          (/ 1.0 (+ 1.0 (FastMath/exp -2.0))) ]
          (seq
           (:value
            (compute/forward-pass! (graph s x))))))))
@@ -39,7 +42,7 @@
         t (from-op (cg/scalar-op :tanh))
         m (comp t s)
         x (node/const "x" [1 2])]
-    (is (= [(FastMath/tanh (/ 1.0 (+ 1.0 (FastMath/exp -1.0))))
+    (is (close? [(FastMath/tanh (/ 1.0 (+ 1.0 (FastMath/exp -1.0))))
           (FastMath/tanh (/ 1.0 (+ 1.0 (FastMath/exp -2.0)))) ]
          (seq
           (:value

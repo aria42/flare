@@ -10,7 +10,6 @@
             [flare.computation-graph :as cg])
   (:import [flare.node Node]
            [org.apache.commons.math3.util FastMath]
-           [org.apache.commons.math3.analysis.function Sigmoid]
            [java.util LinkedList]
            [java.util.concurrent.atomic AtomicLong]
            [clojure.lang IFn$DD IFn$ODD IFn$DDD IFn$ODDD]))
@@ -401,6 +400,32 @@
                           (* (real/entry dO i j)
                              (.invokePrim dfx (real/entry X i j)))))))))))
 
+(defn vect-sigmoid [in out]
+  ;; exp(x)
+  (vect-math/exp! in out)
+  ;; exp(x) / (exp(x) + 1)
+  (vect-math/linear-frac! 1.0 out 0.0 1.0 out 1.0 out)
+  out)
+
+(defn sigmoid-deriv ^double [^double x]
+  (let [sig (/ 1.0 (+ 1.0 (FastMath/exp (- x))))]
+    (* sig (- 1.0 sig))))
+
+
+(defrecord SigmoidTensorOp []
+  cg/TensorOp
+  (ensure-valid?! [this [input]]
+    (ensure-valid-shape?! (:shape input))
+    true)
+  (forward-node-pass! [this node]
+    (let [output (:value node)
+          input (:value (first (:children node)))]
+      (vect-sigmoid input output))
+    node)
+  (backward-node-pass! [this node]
+    (element-wise-backward! sigmoid-deriv node)))
+
+
 (defrecord ElementwiseTransformOp
   [^IFn$DD fx ^IFn$DD dfx]
   cg/TensorOp
@@ -430,20 +455,10 @@
   (backward-node-pass! [this node]
     (element-wise-backward! dfx node)))
 
-(let [s (Sigmoid.)]
-  (defn ^:private ^:static sigmoid ^double  [^double x]
-    (.value s x)))
-
 (def ^:private +elementwise-op+
   ;; f(x) = e^x, df(x) = e^x
   {:exp [(fn -exp ^double [^double x] (FastMath/exp x))
-         (fn -exp-d ^double [^double x] (FastMath/exp x))]
-   ;; f(x) = 1/(1+e^{-x}, df(x) = (sigmoid(x)-1)/sigmoid(x)
-   :sigmoid [(fn -sigmoid ^double [^double x]
-               (sigmoid x))
-             (fn -sigmoid-d ^double [^double x]
-               (let [sig (sigmoid x)]
-                 (* sig (- 1.0 sig))))]})
+         (fn -exp-d ^double [^double x] (FastMath/exp x))]})
 
 (def ^:private +vec-math-op+
   {;; f(x) = tanh(x), df(X) = 1 - tan(x)^2
@@ -481,7 +496,8 @@
     :split ->SplitTensorOp
     :dropout ->DropoutTensorOp
     :cross-entropy-loss ->CrossEntropyLossTensorOp
-    :arg-max ->ArgMaxTensorOp}
+    :arg-max ->ArgMaxTensorOp
+    :sigmoid ->SigmoidTensorOp}
    (map-vals
     (fn [[fx dfx]] #(->VecMathTransformOp fx dfx))
     +vec-math-op+)
