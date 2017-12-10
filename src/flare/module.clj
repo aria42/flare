@@ -63,7 +63,8 @@
 (defn affine
   "graph: returns single output (Wx + b)
    params: [W b]"
-  [model num-out in-shape]
+  [model num-out in-shape
+   & {:keys [bias?] :or {bias? true}}]
   (let [[first-dim & rest] in-shape
         out-shape (vec (cons num-out rest))
         sigma (/ 1.0 (Math/sqrt (double num-out)))
@@ -71,10 +72,12 @@
         W (model/add-params! model [num-out first-dim]
                              :name "W"
                              :init init)
-        b (model/add-params! model out-shape
-                             :name "b"
-                             :init init)]
+        b (when bias?
+            (model/add-params! model out-shape
+                               :name "b"
+                               :init init))]
     (reify
       PModule
       (graph [this x]
-        (cg/+ (cg/* W x) b)))))
+        (let [y (cg/* W x)]
+          (if b (cg/+ y b) y))))))

@@ -1,6 +1,7 @@
 (ns flare.examples.bilstm-tag
   (:gen-class)
   (:require [flare.node :as node]
+            [flare.cnn :as cnn]
             [flare.rnn :as rnn]
             [flare.compute :as compute]
             [flare.embeddings :as embeddings]
@@ -29,6 +30,9 @@
    ["s" "--emb-size NUM" "size of embedding data"
     :default 300
     :parse-fn #(Integer/parseInt ^String %)]
+   ["m" "--model-type MODEL_TYPE" "bilstm or cnn"
+    :default :bilstm
+    :parse-fn keyword]
    ["l" "--lstm-size NUM" "lstm size"
     :default 25
     :parse-fn #(Integer/parseInt ^String %)]
@@ -71,12 +75,38 @@
           (let [label-node (node/const "label" [label])]
             (cg/cross-entropy-loss logits label-node)))))))
 
+(defn cnn-sent-classifier 
+  [model word-emb ^long num-classes]
+  (node/let-scope
+      ;; let-scope so the parameters get smart-nesting
+      [^long emb-size (embeddings/embedding-size word-emb)
+       cnn-feats (cnn/cnn-1D-feats model emb-size
+                                   [{:width 1 :height 100}
+                                    {:width 2 :height 100}
+                                    {:width 3 :height 100}])
+       hidden->logits (module/affine model num-classes [300])]
+    (reify
+      module/PModule
+      ;; build logits
+      (graph [this sent]
+        (when-let [inputs (seq (embeddings/sent-nodes word-emb sent))]
+          (let [hidden (module/graph cnn-feats inputs)
+                train? (:train? (meta this))
+                hidden (if train? (cg/dropout 0.5 hidden) hidden)]
+            (module/graph hidden->logits hidden))))
+      ;; build loss node for two-arguments
+      (graph [this sent label]
+        (when-let [logits (module/graph this sent)]
+          (let [label-node (node/const "label" [label])]
+            (cg/cross-entropy-loss logits label-node)))))))
+
 (defn load-data [path]
   (for [^String line (line-seq (io/reader path))
         :let [[tag & sent] (.split (.trim line) " ")]]
     [sent (double (Integer/parseInt tag))]))
 
-(defn train [{:keys [lstm-size, num-classes, train-file, test-file] :as opts}]
+(defn train [{:keys [lstm-size, num-classes, train-file, test-file model-type] 
+              :as opts}]
   (let [emb (load-embeddings opts)
         train-data (take (:num-data opts) (load-data train-file))
         test-data (take (:num-data opts) (load-data test-file))
@@ -84,7 +114,9 @@
         model (model/simple-param-collection)
         ;; classifier can use a cache to avoid
         ;; re-allocating tensors across prediction
-        classifier (lstm-sent-classifier model emb lstm-size num-classes)
+        classifier (if (or (nil? model-type) (= :bilstm model-type))
+                     (lstm-sent-classifier model emb lstm-size num-classes)
+                     (cnn-sent-classifier model emb num-classes))
         loss-fn (fn [[sent tag]]
                     (-> classifier
                         (with-meta {:train? true})
@@ -116,6 +148,7 @@
   (def opts {:embed-file "data/small-glove.50d.txt"
              :lstm-size 100
              :num-classes 2
+             :model-type :bilstm
              :num-data 1000
              :train-file "data/sentiment-train10k.txt"
              :test-file "data/sentiment-test10k.txt"

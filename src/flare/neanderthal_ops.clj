@@ -271,7 +271,8 @@
           inputs (map :value (:children node))]
       (copy! (first inputs) output)
       (doseq [x (rest inputs)]
-        (vect-math/fmax! output x))))
+        (vect-math/fmax! output x)))
+    node)
   (backward-node-pass! [this node]
     (let [out-val (:value node)
           out-grad (:grad node)
@@ -538,6 +539,7 @@
   (merge
    {:+ ->SumTensorOp
     :* ->MultTensorOp
+    :max ->MaxTensorOp
     :squeeze ->SqueezeTensorOp
     :strech ->StrechTensorOp
     :hadamard ->HadamardTensorOp

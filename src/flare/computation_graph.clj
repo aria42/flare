@@ -183,7 +183,7 @@
                       {:num-args (count input-nodes)})))
     (let [shapes (map :shape input-nodes)]
       (when-let [bad (some (fn [s] (or (nil? s) (> (count s) 2))) shapes)]
-        (throw (ex-info "Only max 2d allowed" {:bad bad})))
+        (throw (ex-info "Only max 2d allowed" {:shapes shapes})))
       (when-not (every?
                  (fn [[[a b] [c d]]] (= b c))
                  (partition 2 shapes))
@@ -403,11 +403,14 @@
 
 (defn concat
   [dim & inputs]
-  (add-graph-op (->ConcatOp dim) inputs))
+  ;; handle no-op for singleton input
+  (if (= (count inputs) 1)
+    (first inputs)
+    (add-graph-op (->ConcatOp dim) inputs)))
 
 (defn max
   "Inputs: Tensors of same shape
-   Output: Tensor of input shape where each element is maximum "
+   Output: Tensor of input shape where each element is maximum"
   [& inputs]
   (add-graph-op (->MaxOp) inputs))
 
