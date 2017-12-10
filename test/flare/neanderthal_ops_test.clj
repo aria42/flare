@@ -305,4 +305,7 @@
     (is (< (l2-dist
             (dv [2.0 2.0 2.0])
             (flare/div (flare/scale x 2) 0.0 x 0.0))
-           0.0001))))
+           0.0001)))
+  (let [X (-mk-matrix 2 2 [1 2 3 4])]
+    (is (= (dv [1 2]) (flare/select! X [0])))
+    (is (= (dv [3 4]) (flare/select! X [1])))))

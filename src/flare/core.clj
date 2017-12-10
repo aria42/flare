@@ -68,6 +68,10 @@
     "return sclaed tensor")
   (scale! [this alpha]
     "mutate scale")
+  (select! [this path]
+    "live-link to sub-tensor @ path. The `path` length should be less
+     than number of dimensions. The returned object should be linked
+     to the parent and changes should be reflected.")
   (transform
     [this get-val]
     [this other-tensor get-val]

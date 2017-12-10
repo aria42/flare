@@ -32,19 +32,44 @@
   (seq [this] (map (juxt key val) m)))
 
 (defn fixed-embedding
-  [factory emb-size obj-vec-pairs]
-  (let [m (java.util.HashMap.)
-        expected-shape [emb-size]]
-    (doseq [[obj nums] obj-vec-pairs]
-      (when-let [dupe (.get m obj)]
-        (throw (ex-info "Duplicate entry" {:dupe obj})))
-      (let [t (flare/from factory nums)
-            s (flare/shape t)]
-        (when (not= s expected-shape)
-          (throw (ex-info "embedding doesn't have same shape"
-                          {:expected [embedding-size] :actual s})))
-        (.put m obj t)))
-    (FixedEmbedding. m (long emb-size))))
+  ([emb-size obj-vec-pairs]
+   (fixed-embedding (:factory (flare/state)) emb-size obj-vec-pairs))
+  ([factory emb-size obj-vec-pairs]
+   (let [m (java.util.HashMap.)
+         expected-shape [emb-size]]
+     (doseq [[obj nums] obj-vec-pairs]
+       (when-let [dupe (.get m obj)]
+         (throw (ex-info "Duplicate entry" {:dupe obj})))
+       (let [t (flare/from factory nums)
+             s (flare/shape t)]
+         (when (not= s expected-shape)
+           (throw (ex-info "embedding doesn't have same shape"
+                           {:expected [embedding-size] :actual s})))
+         (.put m obj t)))
+     (FixedEmbedding. m (long emb-size)))))
+
+(defn learned-embedings
+  [param-node vocab]
+  (let [item->idx (into {} (map-indexed (fn [i x] [x i]) vocab))
+        [num-items emb-size :as shape] (:shape param-node)
+        param-val (:value param-node)
+        param-grad (:grad param-node)
+        param-emb-shape [emb-size]
+        param-name (:ref-name param-node)]
+    (when-not (and (= (count shape) 2) (= (count vocab) num-items))
+      (throw (ex-info "Mismatched parameter embedding"
+                      {:param-shape shape :vocab-size (count vocab)})))
+    (reify Embedding
+      (vocab [this] vocab)
+      (embedding-size [this] emb-size)
+      (lookup [this item]
+        (when-let [idx (item->idx item)]
+          (node/map->Node
+           {:type :params
+            :ref-name (format "%s@%s" param-name item)
+            :shape param-emb-shape
+            :value (flare/select! param-val [idx])
+            :grad (flare/select! param-grad [idx])}))))))
 
 (defn read-text-embedding-pairs [rdr]
   (for [^String line (line-seq rdr)

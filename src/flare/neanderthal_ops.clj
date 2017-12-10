@@ -779,6 +779,11 @@
   (pow! [this exp] (-pow! this exp))
   (scale [this alpha] (np/scal alpha this))
   (scale! [this alpha] (np/scal! alpha this))
+  (select! [this path]
+    (when-not (= (count path) 1)
+      (throw (ex-info "Only can select rows" {:path path})))
+    (let [row-idx (long (first path))]
+      (row this row-idx)))
   (transform
     ([this get-val] (-transform (copy this) get-val))
     ([this other get-val] (-transform this other get-val)))
