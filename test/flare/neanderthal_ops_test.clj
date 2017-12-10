@@ -6,7 +6,9 @@
             [flare.compute :as compute]
             [flare.computation-graph :as cg]
             [flare.core :as flare]
-            [flare.node :as node]))
+            [flare.node :as node]
+            [uncomplicate.neanderthal.core :as np]
+            [uncomplicate.neanderthal.vect-math :as vect-math]))
 
 (deftest sum-tensor-op-test
   (testing "C = A + B"
@@ -286,3 +288,21 @@
       (is (= (dv [3 4])(:value o)))
       (cg/backward-node-pass! op o)
       (is (= [0. 0.  3. 4. 0.] (seq (:grad n1)))))))
+
+(deftest core-ops-test
+  (let [x (dv [1 2 3])]
+    (is (= (dv [2 4 6]) (flare/scale x 2.0)))
+    (is (= (dv [3 6 9]) (flare/add x 2.0 x)))
+    (is (= (dv [2 4 6]) (flare/add x x)))
+    (is (< (l2-dist
+            (dv [1.0 1.0 1.0])
+            (flare/div x  x))
+           0.0001))
+    (is (< (l2-dist
+            (dv [1.0 1.0 1.0])
+            (flare/div x 0.0 x 0.0))
+           0.0001))
+    (is (< (l2-dist
+            (dv [2.0 2.0 2.0])
+            (flare/div (flare/scale x 2) 0.0 x 0.0))
+           0.0001))))

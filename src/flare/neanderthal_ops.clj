@@ -701,22 +701,26 @@
   (class (dv 1))
 
   (factory [this] static-factory)
-  (add [this other] (np/axpy other this))
-  (add [this alpha other] (np/axpy alpha other this))
-  (add! [this other] (np/axpy! other this))
-  (add! [this alpha other] (np/axpy! alpha other this))
-  (div [this denom]
-    (vect-math/div this denom))
-  (div [this denom-offset denom]
-    (vect-math/linear-frac 1.0 this 0.0 1.0 denom denom-offset))
-  (div [this numer-offset denom denom-offset]
-    (vect-math/linear-frac 1.0 this numer-offset 1.0 denom denom-offset))
-  (div! [this denom]
-    (vect-math/div! this denom this))
-  (div! [this denom-offset denom]
-    (vect-math/linear-frac! 1.0 this 0.0 1.0 denom denom-offset this))
-  (div! [this numer-offset denom denom-offset]
-    (vect-math/linear-frac! 1.0 this numer-offset 1.0 denom denom-offset this))
+  (add
+    ([this other] (np/axpy other this))
+    ([this alpha other] (np/axpy alpha other this)))
+  (add!
+    ([this other] (np/axpy! other this))
+    ([this alpha other] (np/axpy! alpha other this)))
+  (div
+    ([this denom]
+     (vect-math/div this denom))
+    ([this denom-offset denom]
+     (vect-math/linear-frac 1.0 this 0.0 1.0 denom denom-offset))
+    ([this numer-offset denom denom-offset]
+     (vect-math/linear-frac 1.0 this numer-offset 1.0 denom denom-offset)))
+  (div!
+    ([this denom]
+     (vect-math/div! this denom))
+    ([this denom-offset denom]
+     (vect-math/linear-frac! 1.0 this 0.0 1.0 denom denom-offset))
+    ([this numer-offset denom denom-offset]
+     (vect-math/linear-frac! 1.0 this numer-offset 1.0 denom denom-offset)))
   (mult [this other]
     (vect-math/mul this other))
   (mult! [this other]
@@ -753,18 +757,20 @@
   (add!
     ([this other] (np/axpy! other this))
     ([this alpha other] (np/axpy! alpha other this)))
-  (div [this denom]
-    (vect-math/div this denom))
-  (div [this denom-offset denom]
-    (vect-math/linear-frac 1.0 this 0.0 1.0 denom denom-offset))
-  (div [this numer-offset denom denom-offset]
-    (vect-math/linear-frac 1.0 this numer-offset 1.0 denom denom-offset))
-  (div! [this denom]
-    (vect-math/div! this denom this))
-  (div! [this denom-offset denom]
-    (vect-math/linear-frac! 1.0 this 0.0 1.0 denom denom-offset this))
-  (div! [this numer-offset denom denom-offset ]
-    (vect-math/linear-frac! 1.0 this numer-offset 1.0 denom denom-offset this))
+  (div
+    ([this denom]
+     (vect-math/div this denom))
+    ([this denom-offset denom]
+     (vect-math/linear-frac 1.0 this 0.0 1.0 denom denom-offset))
+    ([this numer-offset denom denom-offset]
+     (vect-math/linear-frac 1.0 this numer-offset 1.0 denom denom-offset)))
+  (div!
+    ([this denom]
+     (vect-math/div! this denom))
+    ([this denom-offset denom]
+     (vect-math/linear-frac! 1.0 this 0.0 1.0 denom denom-offset))
+    ([this numer-offset denom denom-offset]
+     (vect-math/linear-frac! 1.0 this numer-offset 1.0 denom denom-offset)))
   (mult [this other]
     (vect-math/mul this other))
   (mult! [this other]
