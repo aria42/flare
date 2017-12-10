@@ -1,7 +1,8 @@
 (ns flare.optimize
   (:require [flare.core :as flare]
             [flare.model :as model]
-            [flare.compute :as compute]))
+            [flare.compute :as compute]
+            [flare.cache-pool :as cache-pool]))
 
 (defprotocol Optimizer
   (init [this params-node]
@@ -59,39 +60,32 @@
      (fn ^double [^double cur ^double grad]
        (- cur (* alpha grad))))))
 
+(defn update-expected-sqs [accum ^double gamma update]
+  (flare/scale! accum gamma)
+  (flare/add! accum (- 1.0 gamma) (flare/pow update 2.0)))
+
 (defrecord Adadelta [factory ^double eta ^double gamma ^double epsilon]
   Optimizer
   (init [this params-node]
     ;; sum-of-squares
     (let [shape (:shape params-node)]
-      {:exp-grad-sqs (flare/zeros factory shape)
-       :exp-delta-sqs (flare/zeros factory shape)
-       :delta (flare/zeros factory shape)}))
+      {:exp-grad-sqs (flare/zeros factory shape :no-cache? true)
+       :exp-delta-sqs (flare/zeros factory shape :no-cache? true)}))
   (update-params! [this params-node state]
     (let [g (:grad params-node)
           v (:value params-node)
           {:keys [exp-grad-sqs, exp-delta-sqs, delta]} state]
       ;; updaete gradient squared
       ;; E[g2_t] = gamma E[g2_{t-1}] + (1-gamma)  g2_t
-      (flare/transform! exp-grad-sqs g
-       (fn ^double [^double cur ^double gi]
-         (+ (* gamma cur) (* (- 1.0 gamma) gi gi))))
-      ;; copy gradient to update
-      (flare/copy! delta g)
-      ;; make update look like
-      (flare/transform! delta exp-grad-sqs
-        (fn ^double [^double gi ^double G2i]
-          (/ gi (Math/sqrt (+ epsilon G2i)))))
-      (flare/transform! delta exp-delta-sqs
-        (fn ^double [^double gi ^double d2i]
-          (* gi (Math/sqrt (+ epsilon d2i)))))
-      ;; perform update
-      (flare/transform! v delta
-        (fn ^double [^double cur ^double u]
-          (- cur (* eta u))))
-      (flare/transform! exp-delta-sqs delta
-         (fn ^double [^double cur ^double di]
-           (+ (* gamma cur) (* (- 1.0 gamma) di di))))
+      (update-expected-sqs exp-grad-sqs gamma g)
+      (let [delta (flare/div exp-delta-sqs epsilon exp-grad-sqs epsilon)]
+        (flare/pow! delta 0.5)
+        (flare/mult! delta g)
+        ;; actually move params
+        (flare/add! v (- eta) delta)
+        ;; perform update
+        ;; E[d2_t] = gamma E[d2_{t-1}] + (1-gamma)  d2_t
+        (update-expected-sqs exp-delta-sqs gamma delta))
       state)))
 
 (defn ada-delta
@@ -124,7 +118,8 @@
             (when-let [g (build-graph x)]
               (let [n (if (:eager? (flare/state))
                         g
-                        (compute/forward-pass! (compute/with-model-params model g) factory))
+                        (compute/forward-pass!
+                         (compute/with-model-params model g) factory))
                     loss (first (:value n))]
                 ;; accumulate gradient
                 (assoc n :grad (flare/copy! (:grad n) [1]))
@@ -137,13 +132,13 @@
         rng #(- (* 2.0 (Math/random)) 1.0)
         dir (repeatedly (alength xs) rng)
         [fx grad] (val-at diff-fn xs)
-        get-bump (fn [alpha]
-                   (map (fn [x d] (+ x (* alpha d))) xs dir))
-        expected (reduce + (map * dir grad))]
+        get-bump (fn [^double alpha]
+                   (map (fn [^double x ^double d] (+ x (* alpha d))) xs dir))
+        ^double expected (reduce + (map * dir grad))]
     (println "Start bump " [fx grad])
     (loop [eps 0.5]
-      (let [[plus-x _] (val-at diff-fn (double-array (get-bump eps)))
-            [neg-x _] (val-at diff-fn (double-array (get-bump (- eps))))
+      (let [[^double plus-x _] (val-at diff-fn (double-array (get-bump eps)))
+            [^double neg-x _] (val-at diff-fn (double-array (get-bump (- eps))))
             approx (/ (- plus-x neg-x) (* 2 eps))
             delta (Math/abs (- approx expected))]
         (println {:approx approx :expected expected :plus-x plus-x :neg-x neg-x})

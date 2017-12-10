@@ -29,15 +29,45 @@
 (defprotocol Tensor
   (factory [this]
     "returns `PTensorFactory` underlying this tensor")
+  (shape [this]
+    "return the shape of the tennsor as integer (clojure) vector")
   (add
     [this other]
-    [this alpha other]
+    [this scale other]
     "return new tensor which adds this to `other`
-     and possibly scales `other` by scalar `alpha`")
+     and possibly scales `other` by scalar `scale`")
   (add!
     [this other]
-    [this alpha other]
+    [this scale other]
     "mutable version of `add` that updates `this`")
+  (div
+    [this denom]
+    [this denom-offset denom]
+    [this numer-offset other denom-offset]
+    "return new tensor element-wise divide by `denom` possibly with
+     offsets for numerator or denominator offset
+    result = (this + numer-offset) / (other + denom-offset)")
+  (div!
+    [this denom]
+    [this denom-offset denom]
+    [this numer-offset other denom-offset]
+    "mutable version of `div`")
+  (mult
+    [this other]
+    "return new pointwise multiplication tensor")
+  (mult!
+    [this other]
+    "pointwise in-place multiplication")
+  (pow
+    [this exp]
+    "element-wise exponeniate")
+  (pow!
+    [this exp]
+    "in-place element-wise exponetiationate")
+  (scale [this alpha]
+    "return sclaed tensor")
+  (scale! [this alpha]
+    "mutate scale")
   (transform
     [this get-val]
     [this other-tensor get-val]
@@ -63,9 +93,7 @@
     "mutable version of `transform!` that updates `this`")
   (copy! [this src-tensor-like]
     "copy from source to this tensor. The src should be same set of things
-     accdepted by `PTensorFactory/from`")
-  (shape [this]
-    "return the shape of the tennsor as integer (clojure) vector"))
+     accdepted by `PTensorFactory/from`"))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Tensor Shape
@@ -151,11 +179,15 @@
   (reset! *state init-state))
 
 (defn zeros
-  "create a zero tensor with given shape using default tensor factory"
+  "create a zero tensor with given shape using default tensor factory.
+   Unless `:no-cache?` is passed in will use cache if avaialble"
   ([shape]
-   (-zeros (:factory (state)) shape))
-  ([factory shape]
-   (-zeros factory shape)))
+   (zeros (:factory (state)) shape))
+  ([factory shape & {:keys [no-cache?]}]
+   (if (or no-cache? (nil? (:cache (state))))
+     (-zeros factory shape)
+     (let [c (:cache (state))]
+       (cache-pool/get-obj c shape)))))
 
 (defn from
   "coerce data into a tensor, should work with nested clojure seqs of numbers"

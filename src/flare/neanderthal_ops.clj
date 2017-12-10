@@ -684,6 +684,18 @@
 (defn factory []
   static-factory)
 
+(defn -pow [x p]
+  (case (double p)
+    2.0 (vect-math/sqr x)
+    0.5 (vect-math/sqrt x)
+    (vect-math/pow x p)))
+
+(defn -pow! [x p]
+  (case (double p)
+    2.0 (vect-math/sqr! x)
+    0.5 (vect-math/sqrt! x)
+    (vect-math/pow! x p)))
+
 ;; Vector Class -- classname internal so don't want to expose
 (extend-protocol flare/Tensor
   (class (dv 1))
@@ -693,6 +705,26 @@
   (add [this alpha other] (np/axpy alpha other this))
   (add! [this other] (np/axpy! other this))
   (add! [this alpha other] (np/axpy! alpha other this))
+  (div [this denom]
+    (vect-math/div this denom))
+  (div [this denom-offset denom]
+    (vect-math/linear-frac 1.0 this 0.0 1.0 denom denom-offset))
+  (div [this numer-offset denom denom-offset]
+    (vect-math/linear-frac 1.0 this numer-offset 1.0 denom denom-offset))
+  (div! [this denom]
+    (vect-math/div! this denom this))
+  (div! [this denom-offset denom]
+    (vect-math/linear-frac! 1.0 this 0.0 1.0 denom denom-offset this))
+  (div! [this numer-offset denom denom-offset]
+    (vect-math/linear-frac! 1.0 this numer-offset 1.0 denom denom-offset this))
+  (mult [this other]
+    (vect-math/mul this other))
+  (mult! [this other]
+    (vect-math/mul! this other))
+  (pow [this exp] (-pow this exp))
+  (pow! [this exp] (-pow! this exp))
+  (scale [this alpha] (np/scal alpha this))
+  (scale! [this alpha] (np/scal! alpha this))
   (transform
     ([this get-val] (-transform (copy this) get-val))
     ([this other get-val] (-transform (copy this) other get-val)))
@@ -721,6 +753,26 @@
   (add!
     ([this other] (np/axpy! other this))
     ([this alpha other] (np/axpy! alpha other this)))
+  (div [this denom]
+    (vect-math/div this denom))
+  (div [this denom-offset denom]
+    (vect-math/linear-frac 1.0 this 0.0 1.0 denom denom-offset))
+  (div [this numer-offset denom denom-offset]
+    (vect-math/linear-frac 1.0 this numer-offset 1.0 denom denom-offset))
+  (div! [this denom]
+    (vect-math/div! this denom this))
+  (div! [this denom-offset denom]
+    (vect-math/linear-frac! 1.0 this 0.0 1.0 denom denom-offset this))
+  (div! [this numer-offset denom denom-offset ]
+    (vect-math/linear-frac! 1.0 this numer-offset 1.0 denom denom-offset this))
+  (mult [this other]
+    (vect-math/mul this other))
+  (mult! [this other]
+    (vect-math/mul! this other))
+  (pow [this exp] (-pow this exp))
+  (pow! [this exp] (-pow! this exp))
+  (scale [this alpha] (np/scal alpha this))
+  (scale! [this alpha] (np/scal! alpha this))
   (transform
     ([this get-val] (-transform (copy this) get-val))
     ([this other get-val] (-transform this other get-val)))

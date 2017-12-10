@@ -81,10 +81,11 @@
       ;; let-scope so the parameters get smart-nesting
       [^long emb-size (embeddings/embedding-size word-emb)
        cnn-feats (cnn/cnn-1D-feats model emb-size
-                                   [{:width 1 :height 100}
-                                    {:width 2 :height 100}
-                                    {:width 3 :height 100}])
-       hidden->logits (module/affine model num-classes [300])]
+                                   [{:width 1 :height 25}
+                                    {:width 2 :height 25}
+                                    {:width 3 :height 25}])
+       ;; 75 is number of concattened cnn feats
+       hidden->logits (module/affine model num-classes [75])]
     (reify
       module/PModule
       ;; build logits
@@ -105,6 +106,11 @@
         :let [[tag & sent] (.split (.trim line) " ")]]
     [sent (double (Integer/parseInt tag))]))
 
+(defn get-classifier [model-type model emb lstm-size num-classes]
+  (case model-type
+    :bilstm (lstm-sent-classifier model emb lstm-size num-classes)
+    :cnn (cnn-sent-classifier model emb num-classes)))
+
 (defn train [{:keys [lstm-size, num-classes, train-file, test-file model-type] 
               :as opts}]
   (let [emb (load-embeddings opts)
@@ -114,9 +120,7 @@
         model (model/simple-param-collection)
         ;; classifier can use a cache to avoid
         ;; re-allocating tensors across prediction
-        classifier (if (or (nil? model-type) (= :bilstm model-type))
-                     (lstm-sent-classifier model emb lstm-size num-classes)
-                     (cnn-sent-classifier model emb num-classes))
+        classifier (get-classifier model-type model emb lstm-size num-classes)
         loss-fn (fn [[sent tag]]
                     (-> classifier
                         (with-meta {:train? true})
@@ -148,7 +152,7 @@
   (def opts {:embed-file "data/small-glove.50d.txt"
              :lstm-size 100
              :num-classes 2
-             :model-type :bilstm
+             :model-type :cnn
              :num-data 1000
              :train-file "data/sentiment-train10k.txt"
              :test-file "data/sentiment-test10k.txt"
