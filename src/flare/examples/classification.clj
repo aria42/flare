@@ -1,4 +1,4 @@
-(ns flare.examples.bilstm-tag
+(ns flare.examples.classification
   (:gen-class)
   (:require [flare.node :as node]
             [flare.cnn :as cnn]
