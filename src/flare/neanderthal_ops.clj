@@ -7,7 +7,8 @@
             [uncomplicate.neanderthal.real :as real]
             [flare.cache-pool :as cache-pool]
             [uncomplicate.neanderthal.vect-math :as vect-math]
-            [flare.computation-graph :as cg])
+            [flare.computation-graph :as cg]
+            [flare.generic-tensor-ops :as gto])
   (:import [flare.node Node]
            [org.apache.commons.math3.util FastMath]
            [java.util LinkedList]
@@ -57,6 +58,25 @@
         ;; input-grad += df_dt
         (np/axpy! df_dt input-grad)))
     node))
+
+
+(defrecord SumElemsTensorOp []
+   cg/TensorOp
+   (ensure-valid?! [this input-nodes]
+     (doseq [^Node n input-nodes]
+       (ensure-valid-shape?! (.shape n))))
+   (forward-node-pass! [this node]
+     (let [input (-> node :children first :value)
+           s (double (sum input))]
+       (if (vctr? input)
+         (real/entry! (:value node) 0 s)
+         (real/entry! (:value node) 0 0 s)))
+     node)
+   (backward-node-pass! [this node]
+     (let [in-grad (-> node :grad first double)
+           grad (-> node :children first :grad)]
+           (alter! grad (fn ^double [^double x] (+ x in-grad))))))
+
 
 (defrecord MultTensorOp []
   cg/TensorOp
@@ -537,10 +557,12 @@
 
 (def ^:private +tensor-ops+
   (merge
+   (gto/tensor-ops)
    {:+ ->SumTensorOp
     :* ->MultTensorOp
     :max ->MaxTensorOp
     :squeeze ->SqueezeTensorOp
+    :sum-elems ->SumElemsTensorOp
     :strech ->StrechTensorOp
     :hadamard ->HadamardTensorOp
     :concat ->ConcatTensorOp

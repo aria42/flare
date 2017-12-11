@@ -155,6 +155,18 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Graph Edge Operations
 
+(defn -ensure-arity [expected-arity input-nodes]
+  (when-not (= (count input-nodes) expected-arity)
+    (throw (ex-info "Wrong number of inputs"
+                    {:expected expected-arity
+                     :given (count input-nodes)}))))
+
+(defn -ensure-same-shapes [nodes]
+  (let [[shape & other-shapes :as shapes] (map :shape nodes)]
+    (when-not (every? #(= shape %) other-shapes)
+      (throw (ex-info "All shapes must be the same"
+                      {:shapes shapes})))))
+
 (defrecord SumGraphOp []
   GraphOp
   (op-key [this] :+)
@@ -169,10 +181,27 @@
     (:shape (first input-nodes)))
   (op-descriptor [this] "+"))
 
+(defrecord SumElemsGraphOp []
+   GraphOp
+   (op-key [this] :sum-elems)
+   (op-descriptor [this] "sum-elems")
+   (op-validate! [this nodes]
+     (-ensure-arity 1 nodes))
+   (forward-shape [this inputs] [1]))
+
 (defn vec-remove
   "remove elem in coll"
   [coll ^long pos]
   (vec (clojure.core/concat (subvec coll 0 pos) (subvec coll (inc pos)))))
+
+(defrecord ScaleGraphOp [^double scalar]
+  GraphOp
+  (op-key [this] :scale)
+  (op-validate! [this input-nodes]
+    (-ensure-arity 1 input-nodes))
+  (forward-shape [this [input]]
+    (:shape input))
+  (op-descriptor [this] (format "scale(%)" scalar)))
 
 (defrecord MultGraphOp []
   GraphOp
@@ -200,8 +229,7 @@
   GraphOp
   (op-key [this] :arg-max)
   (op-validate! [this nodes]
-    (when-not (= 1 (count nodes))
-      (throw (ex-info "Required 1 arg" {:nodes nodes}))))
+    (-ensure-arity 1 nodes))
   (op-descriptor [this] "arg-max")
   (forward-shape [this nodes] [1]))
 
@@ -217,9 +245,7 @@
   (op-key [this] :squeeze)
   (op-descriptor [this] (str "squeeze-" dim-to-squeeze))
   (op-validate! [this nodes]
-    (when-not (= 1 (count nodes))
-      (throw (ex-info "Squeeze only takes single input"
-                      {:num-args (count nodes)})))
+    (-ensure-arity 1 nodes)
     (let [shape (vec (:shape (first nodes)))]
       (when-not (= 1 (nth shape dim-to-squeeze))
         (throw (ex-info "Squeeze at ``dimension`` not 1"
@@ -235,9 +261,7 @@
   (op-key [this] :sum-elems)
   (op-descriptor [this] "sum-elems")
   (op-validate! [this nodes]
-    (when-not (= 1 (count nodes))
-      (throw (ex-info "SumElems only takes single input"
-                      {:num-args (count nodes)}))))
+    (-ensure-arity 1 nodes))
   (forward-shape [this inputs] [1]))
 
 (defrecord StrechGraphOp [^long dim-to-insert]
@@ -245,9 +269,7 @@
   (op-key [this] :strech)
   (op-descriptor [this] (str "strech-" dim-to-insert))
   (op-validate! [this inputs]
-    (when-not (= 1 (count inputs))
-      (throw (ex-info "Stretch  only takes single input"
-                      {:causes inputs}))))
+    (-ensure-arity 1 inputs))
   (forward-shape [this inputs]
     (let [shape (vec (:shape (first inputs)))]
       (vec
@@ -260,12 +282,10 @@
   GraphOp
   (op-key [this] :cross-entropy-loss)
   (op-descriptor [this] "cross-entropy-loss")
-  (op-validate! [this [activations label & other]]
-    (when (or (nil? activations) (nil? label) (seq other))
-      (throw (ex-info "Expect (activations, labels) pair"
-                      {:activations activations :label label})))
+  (op-validate! [this [activations label :as inputs]]
+    (-ensure-arity 2 inputs)
     (when-not (flare/scalar-shape? (:shape label))
-      (throw (ex-info "Label sjhould be effectively scalar"
+      (throw (ex-info "Label should be effectively scalar"
                       {:label-shape (:shape label)})))
     (when-not (flare/vector-shape? (:shape activations))
       (throw (ex-info "Activations should be vector"
@@ -277,9 +297,8 @@
   GraphOp
   (op-key [this] :hadamard)
   (op-descriptor [this] "hadamard")
-  (op-validate! [this [X Y & inputs]]
-    (when (or (nil? X) (nil? Y))
-      (throw (ex-info "Invalid inputs, must have 2" {:inputs inputs})))
+  (op-validate! [this [X Y :as inputs]]
+    (-ensure-arity 2 inputs)
     (when-not (= (:shape X) (:shape Y))
       (throw (ex-info "Need equal shapes" {:shapes (map :shape [X Y])}))))
   (forward-shape [this [X Y]]
@@ -330,10 +349,8 @@
   GraphOp
   (op-key [this] :max)
   (op-descriptor [this] "max")
-  (op-validate! [this [x & inputs]]
-    (when-not (every? #(= (:shape x) (:shape %)) inputs)
-      (throw (ex-info "All inputs must have same shape"
-                      {:shapes (map :shape inputs)}))))
+  (op-validate! [this inputs]
+    (-ensure-same-shapes inputs))
   (forward-shape [this inputs]
     (-> inputs first :shape)))
 
@@ -422,5 +439,8 @@
            (add-graph-op (->SplitOp dim start stop) [node]))
          (butlast (partition-all 2 1 splits)))))
 
-(defn sum [node]
-  (add-graph-op (SumGraphOp.) [node]))
+(defn sum-elems [node]
+  (add-graph-op (SumElemsGraphOp.) [node]))
+
+(defn scale [scale node]
+  (add-graph-op (ScaleGraphOp. scale) [node]))

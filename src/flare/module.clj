@@ -5,7 +5,8 @@
             [flare.computation-graph :as cg]
             [flare.compute :as compute]
             [flare.cache-pool :as cache-pool]
-            [flare.core :as flare])
+            [flare.core :as flare]
+            [flare.module :as module])
   (:import [flare.node Node]))
 
 (defprotocol PModule
@@ -81,3 +82,13 @@
       (graph [this x]
         (let [y (cg/* W x)]
           (if b (cg/+ y b) y))))))
+
+(def l2-squared-loss
+  (reify
+    PModule
+    (graph [this x y]
+      (let [diff (cg/+ x (cg/scale -1.0 y))]
+        (cg/sum-elems (cg/hadamard diff diff))))
+    clojure.lang.IFn
+    (invoke [this x y]
+      (module/graph this x y))))
