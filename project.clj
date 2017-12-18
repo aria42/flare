@@ -7,7 +7,8 @@
   :jvm-opts ["-mx2000m"]
   :aot :all
   :plugins [[lein-codox "0.10.3"]]
-  :codox {:metadata {:doc/format :markdown}}
+  :codox {:metadata {:doc/format :markdown}
+          :source-uri "https://github.com/aria42/flare/tree/master/{filepath}#L{line}"}
   :lein-release {:deploy-via :clojars}
   :scm {:name "git"
         :url "https://github.com/aria42/flare"}
