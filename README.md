@@ -2,6 +2,8 @@
 
 # flare
 
+[Codox Link](http://aria42.com/flare/)
+
 A Clojure library for dynamic neural nets (e.g., PyTorch, DynNet). Mostly for learning purposes, but totally useable and pretty performant (see Performance below). See introductry blog post [here](http://aria42.com/blog/2017/11/Flare-Clojure-Neural-Net). Current features:
 
 * Define dynamic neural net graphs tensor (ala PyTorch or DynNet) or use the static graph approach (Tensorflow, Caffe2) for better performance.
@@ -29,7 +31,8 @@ See some examples in the [`src/flare/examples`](https://github.com/aria42/flare/
 (def Y (node/const [3 4]))
 (def Z (cg/+ X Y))
 (:value Z)
-;; returns [5.0 7.0] tensor 
+;; 
+returns [5.0 7.0] tensor 
 ```
 
 Notice that the computation happens *eagerly*, you don't need to call `forward` on any node, the operation happens as soon great the graph node. The numerical computations use a pluggable backend, but these can use native hardwarde. While the above example is slightly verbose compared to PyTorch, for longer pieces of code you get more expressiveness. Here's an example of building a simple bidirectional LSTM sentiment classifier for a given sentence. It uses the concept of a *module* which is a protocol for building graphs given an input. Typically, you can make modules that close over new parameters and other modules in a module:
