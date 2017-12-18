@@ -1,4 +1,15 @@
-(ns flare.examples.classification
+(ns flare.examples.sentence-classification
+  "Main class for training/testing a bi-lstm sentence classification model for sentences. Running this class as CLI will require an embedding file, as well as train/test files. Format described below:
+
+  * embedding file: text format, each line formatted as: 'word dimension-1 ... dimension-n' with whitespace delimitation. This is how Glove vectors are distributed as [here][1].
+  * train/test file: text format, each line formatted as: 'label-index word-1 word-2 .. word-n'.The 'label-index' is assumed to be an integer representing the label index. The words are treated as strings and joined with the words in the embedding file.
+
+  For the introductory [Flare blogpost][2], the Glove Vectors come from [1] and the sentiment examples come from [Stanford Sentiment data][3]. The train/test are randomly sampled after concattening  positive/negative examples.
+
+
+  [1]: https://nlp.stanford.edu/projects/glove/
+  [2]: http://aria42.com/blog/2017/11/Flare-Clojure-Neural-Net
+  [3]: http://ai.stanford.edu/%7Eamaas/data/sentiment/"
   (:gen-class)
   (:require [flare.node :as node]
             [flare.cnn :as cnn]
@@ -142,13 +153,15 @@
     (println "Total # params " (model/total-num-params model))
     (train/train! model loss-fn gen-batches train-opts)))
 
-(defn -main [& args]
+(defn -main
+  "CLI entry point for train/test classifiying a sentence with a single label. See the ns doc for full explanation."
+  [& args]
   (let [parse (parse-opts args cli-options)]
     (println (:options parse))
     (train (:options parse))))
 
 (comment
-
+  ;; example of how to run programmatically
   (def opts {:embed-file "data/small-glove.50d.txt"
              :lstm-size 100
              :num-classes 2
@@ -167,4 +180,6 @@
                        (with-meta {:train? true})
                        (module/graph sent tag))))
     (def df (optimize/loss-fn model loss-fn train-data))
-    (optimize/rand-bump-test df (model/to-doubles model))))
+    (optimize/rand-bump-test df (model/to-doubles model)))
+
+)

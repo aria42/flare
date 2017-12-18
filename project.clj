@@ -6,6 +6,8 @@
   :global-vars {*warn-on-reflection* true}
   :jvm-opts ["-mx2000m"]
   :aot :all
+  :plugins [[lein-codox "0.10.3"]]
+  :codox {:metadata {:doc/format :markdown}}
   :lein-release {:deploy-via :clojars}
   :scm {:name "git"
         :url "https://github.com/aria42/flare"}
