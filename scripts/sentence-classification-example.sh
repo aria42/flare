@@ -128,5 +128,5 @@ set +x
 # run the sentence classification
 set -x
 lein with-profile main-sentclass run \
-  --model-type cnn --emb-size 300 --num-data 10000
+  --model-type bilstm --emb-size 300 --num-data 2000
 set +x

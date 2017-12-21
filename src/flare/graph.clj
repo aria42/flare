@@ -1,6 +1,6 @@
 (ns flare.graph
   (:require [clojure.string :as str])
-  (:import [java.util HashMap ArrayList LinkedList HashSet]))
+  (:import [java.util HashMap ArrayList LinkedList HashSet Stack]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Graph Walks
@@ -12,21 +12,32 @@
     (walk-fn node)))
 
 (defn topographic [node]
-  (let [marks (HashMap.)
-        ret (ArrayList.)
-        visit (fn visit [n]
-                (let [m (get marks (:ref-name n) :none)]
-                  (case m
-                    :permanent nil
-                    :temporary (throw (ex-info "Not a DAG"))
-                    :none (do
-                            (.put marks (:ref-name n) :temporary)
-                            (doseq [c (:children n)]
-                              (visit c))
-                            (.put marks (:ref-name n) :permanent)
-                            (.add ret n)))))]
-    (visit node)
-    ret))
+  (let [ret (ArrayList.)
+        stack (Stack.)
+        marks (HashMap.)
+        push-onto-stack (fn [x]
+                          (let [m (get marks (:ref-name x) :none)]
+                            (case m
+                              :visited nil
+                              :processing (throw (ex-info "Not a DAG"
+                                                          {:cause :cyclic-graph
+                                                           :node x}))
+                              :none (.push stack x))))]
+    (push-onto-stack node)
+    (loop []
+      (if-not (empty? stack)
+        (let [n (.peek stack)
+              n-name (:ref-name n)
+              children (:children n)]
+          (do
+            (.put marks n-name :processing)
+            (doseq [c children] (push-onto-stack c))
+            (when (every? #(= (get marks (:ref-name %)) :visited) children)
+              (.pop stack)
+              (.add ret n)
+              (.put marks n-name :visited))
+            (recur)))
+        ret))))
 
 (defn top-down-walk [node walk-fn]
   ;; walk-fn can update children so do a let-binding
