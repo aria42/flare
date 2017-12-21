@@ -5,31 +5,13 @@ myshuf() {
   perl -MList::Util=shuffle -e 'print shuffle(<>);'
 }
 
-# PTB tokenization
+# whitespace tokenization
 normalize_text() {
   sed -e 's/<br \/>/ /g' | \
-    sed -e 's/^"/`` /g' -e 's/\([ ([{<]\)"/\1 `` /g' \
-        -e "s/\([^ \.]\)\./\1 ./g" -e "s/\.\.\./ ... /g" \
-        -e "s/[,;:@#$%&]/ & /g" \
-        -e "s/\([^.]\)\([.]\)\([])}>\"']*\)[ 	]*$/\1 \2\3 /g" \
-        -e "s/[?!]/ & /g" -e "s/[][(){}<>]/ & /g" -e "s/--/ -- /g" \
-        -e "s=/= / =g" -e "s/$/ /" -e "s/^/ /" -e "s/\"/ '' /g" \
-        -e "s/\([^']\)' /\1 ' /g" -e "s/'\([sSmMdD]\) / '\1 /g" \
-        -e "s/'ll / 'll /g" -e "s/'re / 're /g" -e "s/'ve / 've /g" \
-        -e "s/n't / n't /g" -e "s/'LL / 'LL /g" -e "s/'RE / 'RE /g" \
-        -e "s/'VE / 'VE /g" -e "s/N'T / N'T /g" \
-        -e "s/ \([Cc]\)annot / \1an not /g" \
-        -e "s/ \([Dd]\)'ye / \1' ye /g" \
-        -e "s/ \([Gg]\)imme / \1im me /g" \
-        -e "s/ \([Gg]\)onna / \1on na /g" \
-        -e "s/ \([Gg]\)otta / \1ot ta /g" \
-        -e "s/ \([Ll]\)emme / \1em me /g" \
-        -e "s/ \([Mm]\)ore'n / \1ore 'n /g" \
-        -e "s/ '\([Tt]\)is / '\1 is /g" \
-        -e "s/ '\([Tt]\)was / '\1 was /g" \
-        -e "s/ \([Ww]\)anna / \1an na /g" \
-        -e "s/  */ /g" -e "s/^ *//g" -e "s/|/ /g" | \
-        tr '[:upper:]' '[:lower:]' | tr -s " " | tr -cd '[:print:]\n'
+    -e "s/$/ /" -e "s/^/ /" \
+    -e 's/\([^A-Za-z0-9]\) / \1 /g' -e 's/ \([^A-Za-z0-9]\)/ \1 /g' \
+    -e "s/  */ /g" -e "s/^ *//g" -e "s/|/ /g" | \
+    tr '[:upper:]' '[:lower:]' | tr -s " " | tr -cd '[:print:]\n'
 }
 
 DATADIR=data
@@ -51,11 +33,11 @@ set +x
 
 # download the GloVe word vectors
 set -x
-if [ ! -f "${DATADIR}/glove.42B.300d.txt" ]
+if [ ! -f "${DATADIR}/glove.6B.300d.txt" ]
 then
-  wget -c "http://nlp.stanford.edu/data/glove.42B.300d.zip" \
-    -O "${DATADIR}/glove.42B.300d.zip"
-  unzip "${DATADIR}/glove.42B.300d.zip" -d "${DATADIR}/"
+  wget -c "http://nlp.stanford.edu/data/glove.6B.zip" \
+    -O "${DATADIR}/glove.6B.zip"
+  unzip "${DATADIR}/glove.6B.zip" -d "${DATADIR}/"
 fi
 set +x
 
@@ -111,22 +93,9 @@ then
   set +x
 fi
 
-# filter the GloVe vectors (restricted to training and testing words)
-set -x
-if [ ! -f "${DATADIR}/small-glove.300d.txt" ]
-then
-  cat "${DATADIR}/glove.42B.300d.txt" | \
-    "${SCRIPT_DIR}/filter-glove.pl" \
-      "${DATADIR}/sentiment-train-negative.txt" \
-      "${DATADIR}/sentiment-train-positive.txt" \
-      "${DATADIR}/sentiment-test-negative.txt" \
-      "${DATADIR}/sentiment-test-positive.txt" > \
-      "${DATADIR}/small-glove.300d.txt"
-fi
-set +x
-
 # run the sentence classification
 set -x
 lein with-profile main-sentclass run \
-  --model-type bilstm --emb-size 300 --num-data 2000
+  --model-type bilstm --num-data 8000 \
+  --embed-file "${DATADIR}/glove.6B.300d.txt" --emb-size 300
 set +x
