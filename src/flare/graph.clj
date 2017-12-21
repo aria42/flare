@@ -18,7 +18,7 @@
         push-onto-stack (fn [x]
                           (let [m (get marks (:ref-name x) :none)]
                             (case m
-                              :visited nil
+                              :processed nil
                               :processing (throw (ex-info "Not a DAG"
                                                           {:cause :cyclic-graph
                                                            :node x}))
@@ -32,10 +32,10 @@
           (do
             (.put marks n-name :processing)
             (doseq [c children] (push-onto-stack c))
-            (when (every? #(= (get marks (:ref-name %)) :visited) children)
+            (when (every? #(= (get marks (:ref-name %)) :processed) children)
               (.pop stack)
               (.add ret n)
-              (.put marks n-name :visited))
+              (.put marks n-name :processed))
             (recur)))
         ret))))
 

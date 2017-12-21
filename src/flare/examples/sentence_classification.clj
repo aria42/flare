@@ -77,7 +77,7 @@
           (let [hiddens (rnn/build-seq lstm inputs (= num-dirs 2))
                 train? (:train? (meta this))
                 ;; take last output as hidden
-                hidden (last (map first hiddens))
+                hidden (first (last hiddens))
                 hidden (if train? (cg/dropout 0.5 hidden) hidden)]
             (module/graph hidden->logits hidden))))
       ;; build loss node for two-arguments
