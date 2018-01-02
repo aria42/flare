@@ -1,10 +1,10 @@
 (ns flare.examples.sentence-classification
-  "Main class for training/testing a bi-lstm sentence classification model for sentences. Running this class as CLI will require an embedding file, as well as train/test files. Format described below:
+  "Main class for training/testing a bi-lstm sentence or cnn 1D classification model for sentences. Running this class as CLI will require an embedding file, as well as train/test files. Format described below:
 
   * embedding file: text format, each line formatted as: 'word dimension-1 ... dimension-n' with whitespace delimitation. This is how Glove vectors are distributed as [here][1].
   * train/test file: text format, each line formatted as: 'label-index word-1 word-2 .. word-n'.The 'label-index' is assumed to be an integer representing the label index. The words are treated as strings and joined with the words in the embedding file.
 
-  For the introductory [Flare blogpost][2], the Glove Vectors come from [1] and the sentiment examples come from [Stanford Sentiment data][3]. The train/test are randomly sampled after concattening  positive/negative examples.
+  For the introductory [Flare blogpost][2], the Glove Vectors come from [1] and the sentiment examples come from [Stanford Sentiment data][3]. The train/test are randomly sampled after concatenating positive/negative examples.
 
 
   [1]: https://nlp.stanford.edu/projects/glove/
@@ -38,13 +38,13 @@
    ["-c" "--num-classes PATH" "path to data"
     :default 2
     :parse-fn #(Integer/parseInt ^String %)]
-   ["s" "--emb-size NUM" "size of embedding data"
+   ["-s" "--emb-size NUM" "size of embedding data"
     :default 300
     :parse-fn #(Integer/parseInt ^String %)]
-   ["m" "--model-type MODEL_TYPE" "bilstm or cnn"
+   ["-m" "--model-type MODEL_TYPE" "bilstm or cnn"
     :default :bilstm
     :parse-fn keyword]
-   ["l" "--lstm-size NUM" "lstm size"
+   ["-l" "--lstm-size NUM" "lstm size"
     :default 25
     :parse-fn #(Integer/parseInt ^String %)]
    ["-n"  "--num-data DATA"
@@ -59,7 +59,7 @@
 
 (flare/init!)
 
-(defn lstm-sent-classifier 
+(defn lstm-sent-classifier
   [model word-emb ^long lstm-size ^long num-classes]
   (node/let-scope
       ;; let-scope so the parameters get smart-nesting
@@ -77,7 +77,7 @@
           (let [hiddens (rnn/build-seq lstm inputs (= num-dirs 2))
                 train? (:train? (meta this))
                 ;; take last output as hidden
-                hidden (last (map first hiddens))
+                hidden (first (last hiddens))
                 hidden (if train? (cg/dropout 0.5 hidden) hidden)]
             (module/graph hidden->logits hidden))))
       ;; build loss node for two-arguments
@@ -86,7 +86,7 @@
           (let [label-node (node/const "label" [label])]
             (cg/cross-entropy-loss logits label-node)))))))
 
-(defn cnn-sent-classifier 
+(defn cnn-sent-classifier
   [model word-emb ^long num-classes]
   (node/let-scope
       ;; let-scope so the parameters get smart-nesting
@@ -95,7 +95,7 @@
                                    [{:width 1 :height 25}
                                     {:width 2 :height 25}
                                     {:width 3 :height 25}])
-       ;; 75 is number of concattened cnn feats
+       ;; 75 is number of concatenated cnn feats
        hidden->logits (module/affine model num-classes [75])]
     (reify
       module/PModule
@@ -122,7 +122,7 @@
     :bilstm (lstm-sent-classifier model emb lstm-size num-classes)
     :cnn (cnn-sent-classifier model emb num-classes)))
 
-(defn train [{:keys [lstm-size, num-classes, train-file, test-file model-type] 
+(defn train [{:keys [lstm-size, num-classes, train-file, test-file model-type]
               :as opts}]
   (let [emb (load-embeddings opts)
         train-data (take (:num-data opts) (load-data train-file))
@@ -148,13 +148,13 @@
             ;; Report performance info on tensor-ops
             (report/callback #(-> (flare/state) :factory flare/debug-info))]
            :learning-rate 1}]
-    ;; prints shape of all parameters 
+    ;; prints shape of all parameters
     (println "Params " (map (juxt first (comp :shape second)) (seq model)))
     (println "Total # params " (model/total-num-params model))
     (train/train! model loss-fn gen-batches train-opts)))
 
 (defn -main
-  "CLI entry point for train/test classifiying a sentence with a single label. See the ns doc for full explanation."
+  "CLI entry point for train/test classifying a sentence with a single label. See the ns doc for full explanation."
   [& args]
   (let [parse (parse-opts args cli-options)]
     (println (:options parse))

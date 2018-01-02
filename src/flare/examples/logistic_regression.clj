@@ -95,6 +95,9 @@
    ["-f" "--num-feats NUM" "Number of feats"
    :default 100
     :parse-fn #(Integer/parseInt %)]
+   ["-c" "--num-classes NUM" "Number of classes"
+    :default 5
+    :parse-fn #(Integer/parseInt %)]
    ["-h" "--help"]])
 
 (def opts {:num-examples 10000

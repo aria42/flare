@@ -14,7 +14,9 @@
         :url "https://github.com/aria42/flare"}
   :profiles {:dev {:global-vars {*warn-on-reflection* true
                                  *unchecked-math* :warn-on-boxed}
-                   :dependencies [[criterium "0.4.4"]]}}
+                   :dependencies [[criterium "0.4.4"]]}
+             :main-logreg {:main flare.examples.logistic-regression}
+             :main-sentclass {:main flare.examples.sentence-classification}}
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [uncomplicate/neanderthal "0.17.0"]
                  [org.clojure/tools.cli "0.3.5"]])

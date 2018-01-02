@@ -19,7 +19,7 @@
     "take last hidden and reutrn new hidden"))
 
 (defn lstm-cell
-  "Standard LSTM cell 
+  "Standard LSTM cell
     https://en.wikipedia.org/wiki/Long_short-term_memory
   without any peepholes or other adaptations.
 
@@ -60,17 +60,17 @@
 (defn build-seq
   "return sequence of `add-input` outputs for a given `RNNCell`
   and sequence of `inputs`. Can optionally make sequence building
-  bidrectional using `bidirectional?` optional third argument.
+  bidirectional using `bidirectional?` optional third argument.
 
   Returned sequence will drop the `init-hidden` element which doesn't
   correspond to an input."
   ([cell inputs] (build-seq cell inputs false))
-  ([cell inputs bidrectional?]
+  ([cell inputs bidirectional?]
    (let [factory (-> cell cell-model model/tensor-factory)
          out-dim (output-dim cell)
          hidden (init-hidden cell)
          ;; for bidirectional, concat reversed version of input
-         inputs (if bidrectional?
+         inputs (if bidirectional?
                   (map #(cg/concat 0 %1 %2) inputs (reverse inputs))
                   inputs)]
      (loop [inputs inputs hiddens (list (init-hidden cell))]
