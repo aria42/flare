@@ -1,4 +1,5 @@
 (ns flare.neanderthal-ops
+  ""
   (:use [uncomplicate.neanderthal core native])
   (:require [flare.graph :as graph]
             [flare.core :as flare]

@@ -20,9 +20,8 @@
   (get-op [this op-key]
     "returns the `TensorOp` associated with the `op-key`")
   (-from [this data]
-    "create a tensor from `data` (satisfies `Tensor`). Should minimally accept
-     (nested) sequences of numbers, but can also effectively
-     copy an existing tensor")
+    "create a tensor from `data` (output satisfies `Tensor`). Should minimally accept
+     (nested) sequences of numbers, but can also effectively copy an existing tensor")
   (-zeros [this shape]
     "create a 0.0 filled tensor of a given shape"))
 

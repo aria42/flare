@@ -68,8 +68,8 @@
 
 (defn ^Node const
   "A node which is a constant in a graph, typically used in dynamic graphs
-  as leaves. The `data` is either a tensor or the default factory
-  can make a tensor from it."
+  as leaves. The `data` is either a tensor or something which a
+  tensor factory can make a tensor from it."
   ([^String input-name data]
    (let [t (if (satisfies? flare/Tensor data)
              data
