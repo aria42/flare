@@ -17,6 +17,7 @@
                    :dependencies [[criterium "0.4.4"]]}
              :main-logreg {:main flare.examples.logistic-regression}
              :main-sentclass {:main flare.examples.sentence-classification}}
-  :dependencies [[org.clojure/clojure "1.9.0"]
-                 [uncomplicate/neanderthal "0.17.0"]
+  :dependencies [[org.clojure/clojure "1.10.0"]
+                 [uncomplicate/neanderthal "0.25.3"
+                  :exclusions [org.clojure/clojure org.clojure/tools.reader org.clojure/core.async org.clojure/tools.analyzer.jvm]]
                  [org.clojure/tools.cli "0.3.5"]])

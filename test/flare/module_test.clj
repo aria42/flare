@@ -25,7 +25,7 @@
                seq)))))
 
 (defn close? [xs ys]
-  (< (reduce + (map (fn [^double x ^double y] (* (- x y) (- x y))) xs ys)) 0.0001))
+  (< (double (reduce + (map (fn [^double x ^double y] (* (- x y) (- x y))) xs ys))) 0.0001))
 
 (deftest from-op-test
   (let [s (from-op (cg/scalar-op :sigmoid))
